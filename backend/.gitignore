@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.env
+*.egg-info/
+dist/
+build/
+
+# Storage (uploads + sessions are runtime data)
+storage/uploads/
+storage/sessions/
+storage/ai_settings.json
+storage/service_account.json
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
