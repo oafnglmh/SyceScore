@@ -1,5 +1,5 @@
 // API configuration
-export const API_BASE = import.meta.env.VITE_API_BASE || '/api'
+export const API_BASE = import.meta.env.VITE_API_BASE || 'https://sycescore.onrender.com/api'
 
 // File constraints
 export const MAX_FILE_SIZE_MB = 50
