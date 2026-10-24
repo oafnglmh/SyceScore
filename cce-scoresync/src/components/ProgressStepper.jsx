@@ -1,13 +1,15 @@
-import { Check, Circle, Loader2 } from 'lucide-react'
+import { AlertTriangle, Check, Circle, Loader2, XCircle } from 'lucide-react'
 import { PROCESSING_STEPS } from '../constants'
 
 /**
  * @param {{
  *   currentStep: string,  // step id
  *   progress?: { step: string, message?: string, percent?: number }
+ *   isError?: boolean      // show the active step as failed (red)
+ *   warningMessage?: string // amber inline warning (e.g. key rotation notice)
  * }} props
  */
-export function ProgressStepper({ currentStep, progress }) {
+export function ProgressStepper({ currentStep, progress, isError = false, warningMessage }) {
   const currentIdx = PROCESSING_STEPS.findIndex((s) => s.id === currentStep)
 
   return (
@@ -25,12 +27,14 @@ export function ProgressStepper({ currentStep, progress }) {
                 <div
                   className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0
                     ${done ? 'bg-emerald-100 text-emerald-600' : ''}
-                    ${active ? 'bg-blue-100 text-blue-600' : ''}
+                    ${active && !isError ? 'bg-blue-100 text-blue-600' : ''}
+                    ${active && isError ? 'bg-red-100 text-red-600' : ''}
                     ${pending ? 'bg-slate-100 text-slate-400' : ''}
                   `}
                 >
                   {done && <Check size={14} strokeWidth={2.5} />}
-                  {active && <Loader2 size={14} className="animate-spin" />}
+                  {active && !isError && <Loader2 size={14} className="animate-spin" />}
+                  {active && isError && <XCircle size={14} />}
                   {pending && <Circle size={10} />}
                 </div>
                 {idx < PROCESSING_STEPS.length - 1 && (
@@ -47,14 +51,15 @@ export function ProgressStepper({ currentStep, progress }) {
                 <p
                   className={`text-sm font-medium
                     ${done ? 'text-emerald-700' : ''}
-                    ${active ? 'text-blue-700' : ''}
+                    ${active && !isError ? 'text-blue-700' : ''}
+                    ${active && isError ? 'text-red-700' : ''}
                     ${pending ? 'text-slate-400' : ''}
                   `}
                 >
                   {step.label}
                 </p>
                 {active && progress?.message && (
-                  <p className="text-xs text-slate-500 mt-0.5">
+                  <p className={`text-xs mt-0.5 ${isError ? 'text-red-500' : 'text-slate-500'}`}>
                     {progress.message}
                   </p>
                 )}
@@ -63,6 +68,14 @@ export function ProgressStepper({ currentStep, progress }) {
           )
         })}
       </ol>
+
+      {/* Warning banner (key rotation / quota notice) */}
+      {warningMessage && (
+        <div className="flex items-start gap-2 p-2.5 rounded-md bg-amber-50 border border-amber-200 text-xs text-amber-800">
+          <AlertTriangle size={13} className="shrink-0 mt-0.5 text-amber-500" />
+          <span>{warningMessage}</span>
+        </div>
+      )}
 
       {/* Progress bar */}
       {typeof progress?.percent === 'number' && (
@@ -73,7 +86,9 @@ export function ProgressStepper({ currentStep, progress }) {
           </div>
           <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
             <div
-              className="h-full bg-blue-500 rounded-full transition-all duration-500"
+              className={`h-full rounded-full transition-all duration-500 ${
+                isError ? 'bg-red-400' : 'bg-blue-500'
+              }`}
               style={{ width: `${progress.percent}%` }}
             />
           </div>

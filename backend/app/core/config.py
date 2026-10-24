@@ -31,6 +31,16 @@ class Settings(BaseSettings):
     RETRY_BASE_DELAY: float = 2.0
     GEMINI_TIMEOUT_SECONDS: int = 25  # Timeout 25s cho mỗi lần gọi AI Vision
 
+    # Ollama (local AI)
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "llava:7b"
+    OLLAMA_TIMEOUT: int = 120
+
+    # Cross-validation (Ollama + PaddleOCR)
+    ENABLE_CROSS_VALIDATION: bool = True
+    CROSS_CONFIDENCE_THRESHOLD: float = 0.85
+    OCR_PROVIDER: str = "gemini"  # "gemini" | "ollama" | "paddle_ollama"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
     @field_validator("ALLOWED_ORIGINS", mode="before")

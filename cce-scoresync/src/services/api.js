@@ -24,6 +24,12 @@ export const aiApi = {
   updateSettings: (data) => client.put('/settings/ai', data),
   testConnection: (data) => client.post('/ai/test', data),
   getModels: () => client.get('/ai/models'),
+  getOllamaStatus: () => client.get('/ai/ollama/status'),
+  getOllamaModels: () => client.get('/ai/ollama/models'),
+  addKeys: (keys) => client.post('/settings/ai/keys/add', { keys }),
+  deleteKey: (index) => client.delete(`/settings/ai/keys/${index}`),
+  resetKeys: (keyIndex = null) => client.post('/settings/ai/keys/reset', { key_index: keyIndex }),
+  testAllKeys: () => client.post('/settings/ai/keys/test-all'),
 }
 
 // --- Reconciliations ---

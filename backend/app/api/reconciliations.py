@@ -154,6 +154,9 @@ async def get_extracted_data(session_id: str):
         name=session.name,
         source_a=session.source_a,
         source_b=session.source_b,
+        subject_pairs=session.subject_pairs,
+        subject_groups=session.subject_groups,
+        discarded_classes=session.discarded_classes,
     )
 
 
@@ -176,12 +179,15 @@ async def run_comparison(session_id: str):
     if not session.source_a or not session.source_b:
         raise HTTPException(400, "Chưa có dữ liệu trích xuất")
 
-    rows, stats = matching_service.match_and_compare(session.source_a, session.source_b)
-    session.comparison_results = rows
-    session.stats = stats
+    matching_res = matching_service.match_and_compare(session.source_a, session.source_b)
+    session.comparison_results = matching_res.rows
+    session.stats = matching_res.stats
+    session.subject_groups = matching_res.subject_groups
+    session.subject_pairs = matching_res.subject_pairs
+    session.discarded_classes = matching_res.discarded_classes
     session.status = ReconciliationStatus.COMPLETED
     session_store.save(session)
-    return {"ok": True, "stats": stats}
+    return {"ok": True, "stats": matching_res.stats}
 
 
 @router.get("/{session_id}/results")
@@ -215,6 +221,9 @@ async def get_results(
         stats=session.stats,
         items=rows,
         total=total,
+        subject_groups=session.subject_groups,
+        subject_pairs=session.subject_pairs,
+        discarded_classes=session.discarded_classes,
     )
 
 

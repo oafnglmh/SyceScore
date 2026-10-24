@@ -39,6 +39,26 @@ def _update_progress(session_id: str, **kwargs):
             setattr(prog, k, v)
 
 
+def _check_and_emit_fallback_warning(session_id: str, source_data: SourceData):
+    """Emit a warning_message if any student was processed by PaddleOCR/Ollama fallback."""
+    if not source_data or not source_data.students:
+        return
+    fallback_engines = {"paddle+ollama", "paddle_ollama", "ollama", "ollama+paddle"}
+    used_fallback = any(
+        (s.ocr_engine or "").lower() in fallback_engines
+        for s in source_data.students
+    )
+    if used_fallback:
+        _update_progress(
+            session_id,
+            warning_message=(
+                "⚠️ Hạn mức Gemini API đã hết — hệ thống tự động chuyển sang "
+                "PaddleOCR + Ollama (local) để xử lý phần còn lại. "
+                "Kết quả trích xuất có thể kém chính xác hơn."
+            ),
+        )
+
+
 async def process_reconciliation(
     session_id: str,
     files_a: list[tuple[Path, str]],  # (saved_path, original_filename)
@@ -91,6 +111,9 @@ async def process_reconciliation(
 
         source_a = await extraction_service.extract_multiple_files(files_a, progress_callback=progress_cb_a)
 
+        # Detect if Gemini → PaddleOCR/Ollama fallback was triggered
+        _check_and_emit_fallback_warning(session_id, source_a)
+
         # ── Step 2: Extract Source B ─────────────────────────────────────────
         _update_progress(
             session_id,
@@ -111,6 +134,9 @@ async def process_reconciliation(
 
         source_b = await extraction_service.extract_multiple_files(files_b, progress_callback=progress_cb_b)
 
+        # Detect fallback for source B as well
+        _check_and_emit_fallback_warning(session_id, source_b)
+
         # ── Step 3: Validate ─────────────────────────────────────────────────
         _update_progress(
             session_id,
@@ -128,7 +154,7 @@ async def process_reconciliation(
             percent=80,
         )
 
-        comparison_rows, stats = matching_service.match_and_compare(source_a, source_b)
+        matching_res = matching_service.match_and_compare(source_a, source_b)
 
         # ── Step 5: Save ─────────────────────────────────────────────────────
         _update_progress(
@@ -140,8 +166,11 @@ async def process_reconciliation(
 
         session.source_a = source_a
         session.source_b = source_b
-        session.comparison_results = comparison_rows
-        session.stats = stats
+        session.comparison_results = matching_res.rows
+        session.stats = matching_res.stats
+        session.subject_groups = matching_res.subject_groups
+        session.subject_pairs = matching_res.subject_pairs
+        session.discarded_classes = matching_res.discarded_classes
         session.metadata = source_a.exam_metadata or source_b.exam_metadata
         session.status = ReconciliationStatus.COMPLETED
         session.completed_at = datetime.utcnow()

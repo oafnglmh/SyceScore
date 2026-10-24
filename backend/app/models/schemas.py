@@ -81,6 +81,10 @@ class ExtractedStudent(BaseModel):
     review_reason: Optional[str] = None
     raw_score_text: Optional[str] = None  # Original text before normalization
     edits: Optional[dict[str, Any]] = None  # { field: { original, corrected } }
+    # Cross-validation (Ollama + PaddleOCR dual-engine)
+    cross_confidence: Optional[float] = None        # 0.0 → 1.0, None nếu không có cross-validation
+    cross_validation_detail: Optional[dict] = None  # per-field confidence
+    ocr_engine: Optional[str] = None               # "gemini" | "ollama+paddle"
     # Exam metadata associated with the student's sheet
     semester: Optional[str] = None
     subject: Optional[str] = None
@@ -127,6 +131,8 @@ class ComparisonRow(BaseModel):
     source_page_a: Optional[int] = None
     source_file_b: Optional[str] = None
     source_page_b: Optional[int] = None
+    cross_confidence: Optional[float] = None
+    ocr_engine: Optional[str] = None
 
 
 # ─── Session stats ────────────────────────────────────────────────────────────
@@ -233,6 +239,7 @@ class ProgressInfo(BaseModel):
     status: ReconciliationStatus
     current_step: ProcessingStep = ProcessingStep.UPLOAD
     message: Optional[str] = None
+    warning_message: Optional[str] = None  # non-fatal notice (e.g. key rotation)
     percent: Optional[int] = None
     total_files: Optional[int] = None
     processed_files: int = 0
@@ -243,15 +250,44 @@ class ProgressInfo(BaseModel):
 
 # ─── API request/response models ──────────────────────────────────────────────
 
+class ApiKeyInfo(BaseModel):
+    index: int
+    masked_key: str
+    status: str = "active"  # "active" | "exhausted" | "error"
+    exhausted_at: Optional[str] = None
+    error_message: Optional[str] = None
+    requests_count: int = 0
+
+
+class AddApiKeysRequest(BaseModel):
+    keys: str
+
+
+class ResetKeysRequest(BaseModel):
+    key_index: Optional[int] = None
+
+
 class AISettingsResponse(BaseModel):
     is_configured: bool
-    api_key_masked: Optional[str] = None  # Last 4 chars only
+    api_key_masked: Optional[str] = None  # Last 4 chars of primary key
     model: Optional[str] = None
+    ocr_provider: Optional[str] = "gemini"
+    ollama_model: Optional[str] = "llava:7b"
+    enable_cross_validation: Optional[bool] = True
+    # Key Pool statistics
+    api_keys: list[ApiKeyInfo] = Field(default_factory=list)
+    total_keys: int = 0
+    active_keys: int = 0
+    exhausted_keys: int = 0
+    estimated_pages_remaining: int = 0  # active_keys * 20
 
 
 class AISettingsUpdate(BaseModel):
     api_key: Optional[str] = None
     model: Optional[str] = None
+    ocr_provider: Optional[str] = None
+    ollama_model: Optional[str] = None
+    enable_cross_validation: Optional[bool] = None
 
 
 class AITestRequest(BaseModel):
@@ -263,6 +299,24 @@ class AITestResponse(BaseModel):
     success: bool
     message: str
     model: Optional[str] = None
+
+
+class OllamaStatusResponse(BaseModel):
+    available: bool
+    success: bool
+    message: str
+    model: Optional[str] = None
+
+
+class OllamaModelInfo(BaseModel):
+    name: str
+    size: Optional[int] = None
+    digest: Optional[str] = None
+    modified_at: Optional[str] = None
+
+
+class OllamaModelsListResponse(BaseModel):
+    models: list[OllamaModelInfo]
 
 
 class ModelInfo(BaseModel):

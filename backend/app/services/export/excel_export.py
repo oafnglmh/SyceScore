@@ -116,6 +116,23 @@ class ExcelExportService:
 
         self._sheet_overview(wb, session, meta, stats)
         self._sheet_detail(wb, rows, "Chi tiết đối soát")
+
+        # Add dedicated sheet for each course section if there are multiple
+        if session.subject_groups:
+            existing_sheet_names = set(wb.sheetnames)
+            for sg in session.subject_groups:
+                for cg in sg.classes:
+                    if cg.comparison_rows:
+                        # Clean sheet name (max 31 chars in Excel)
+                        raw_name = f"{sg.subject_name[:12]}_{cg.class_name[:12]}".replace("/", "-").replace("\\", "-").replace(":", "-").replace("*", "").replace("?", "").strip()
+                        sheet_name = raw_name or "Lop_Hoc_Phan"
+                        idx = 2
+                        while sheet_name in existing_sheet_names:
+                            sheet_name = f"{raw_name[:27]}_{idx}"
+                            idx += 1
+                        existing_sheet_names.add(sheet_name)
+                        self._sheet_detail(wb, cg.comparison_rows, sheet_name)
+
         self._sheet_issues(wb, rows)
         if session.source_a:
             self._sheet_source(wb, session.source_a, "Dữ liệu nguồn A")

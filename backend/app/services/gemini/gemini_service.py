@@ -90,6 +90,11 @@ def _supports_vision(model_name: str) -> bool:
     ])
 
 
+class AllKeysExhaustedError(RuntimeError):
+    """Raised when all available Gemini API keys in pool have exhausted their quota."""
+    pass
+
+
 # ─── Service class ────────────────────────────────────────────────────────────
 
 class GeminiService:
@@ -126,7 +131,6 @@ class GeminiService:
             return models_out
         except Exception as e:
             logger.warning(f"list_models failed: {e}")
-            # Return known defaults
             return [
                 {"id": f"models/{m}", "display_name": m, "supports_vision": True, "supports_json_output": True}
                 for m in KNOWN_VISION_MODELS
@@ -142,7 +146,6 @@ class GeminiService:
             self._configure(api_key)
             model_name = model or self.get_model_name()
             m = genai.GenerativeModel(model_name)
-            # Minimal prompt to verify connectivity
             resp = m.generate_content("Trả lời: OK")
             if resp.text:
                 return {
@@ -173,45 +176,78 @@ class GeminiService:
         model_name: Optional[str] = None,
         retries: int = 3,
     ) -> dict:
-        """Extract structured data from an image page using Gemini vision."""
-        self._configure(api_key)
+        """
+        Extract structured data from an image page using Gemini vision.
+        Features automatic API Key failover & rotation when quota is exhausted (429).
+        """
         model_name = model_name or self.get_model_name()
-        model = genai.GenerativeModel(model_name)
 
-        last_err = None
-        for attempt in range(retries):
-            try:
-                image_part = {"mime_type": mime_type, "data": image_bytes}
-                response = model.generate_content(
-                    [EXTRACTION_PROMPT, image_part],
-                    generation_config={"response_mime_type": "application/json"},
-                )
-                raw = response.text.strip()
-                # Strip markdown fences if present
-                if raw.startswith("```"):
-                    raw = raw.split("\n", 1)[1] if "\n" in raw else raw
-                    raw = raw.rsplit("```", 1)[0].strip()
-                data = json.loads(raw)
-                # Inject source info into each student record
-                for s in data.get("students", []):
-                    s["source_file"] = source_file
-                    s["page_number"] = page_number
-                return data
-            except Exception as e:
-                last_err = e
-                err_str = str(e)
-                if "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower():
-                    raise ValueError(
-                        f"Hết quota Gemini API. Vui lòng đợi hoặc thay key khác. ({err_str})"
+        while True:
+            # Pick active key from pool (or explicitly passed key)
+            if api_key:
+                current_key = api_key
+                key_idx = 0
+                key_masked = f"...{api_key[-4:]}" if len(api_key) >= 4 else "****"
+            else:
+                active_info = ai_settings_store.get_active_key()
+                if not active_info:
+                    raise AllKeysExhaustedError(
+                        "Tất cả API key Gemini trong kho đều đã hết hạn mức trong ngày (429 Quota Exceeded)."
                     )
-                if attempt < retries - 1:
-                    wait = settings.RETRY_BASE_DELAY * (2 ** attempt)
-                    logger.warning(
-                        f"Gemini attempt {attempt+1} failed ({e}). Retrying in {wait}s..."
-                    )
-                    await asyncio.sleep(wait)
+                current_key, key_idx, key_masked = active_info
 
-        raise RuntimeError(f"Gemini extraction failed after {retries} attempts: {last_err}")
+            genai.configure(api_key=current_key)
+            model = genai.GenerativeModel(model_name)
+            key_exhausted = False
+            last_err = None
+
+            for attempt in range(retries):
+                try:
+                    image_part = {"mime_type": mime_type, "data": image_bytes}
+                    response = model.generate_content(
+                        [EXTRACTION_PROMPT, image_part],
+                        generation_config={"response_mime_type": "application/json"},
+                    )
+                    raw = response.text.strip()
+                    if raw.startswith("```"):
+                        raw = raw.split("\n", 1)[1] if "\n" in raw else raw
+                        raw = raw.rsplit("```", 1)[0].strip()
+                    data = json.loads(raw)
+                    for s in data.get("students", []):
+                        s["source_file"] = source_file
+                        s["page_number"] = page_number
+
+                    if not api_key:
+                        ai_settings_store.mark_key_success(key_idx)
+                    return data
+                except Exception as e:
+                    last_err = e
+                    err_str = str(e)
+                    is_quota = "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower() or "429" in err_str
+                    if is_quota:
+                        logger.warning(
+                            f"[KeyRotation] Key #{key_idx + 1} ({key_masked}) đã cạn quota (429)! "
+                            f"Đang tự động chuyển sang API key tiếp theo trong kho..."
+                        )
+                        if not api_key:
+                            ai_settings_store.mark_key_exhausted(key_idx, reason=f"429 Quota Exceeded ({err_str[:120]})")
+                            key_exhausted = True
+                            break  # Break retry loop to switch key in outer while loop!
+                        else:
+                            raise ValueError(f"Hết quota Gemini API: {err_str}")
+
+                    if attempt < retries - 1:
+                        wait = settings.RETRY_BASE_DELAY * (2 ** attempt)
+                        logger.warning(
+                            f"Gemini attempt {attempt+1} failed on key {key_masked} ({e}). Retrying in {wait}s..."
+                        )
+                        await asyncio.sleep(wait)
+
+            if key_exhausted:
+                # Rotate to next active key in pool
+                continue
+
+            raise RuntimeError(f"Gemini extraction failed after {retries} attempts on key {key_masked}: {last_err}")
 
     async def extract_from_text(
         self,
@@ -222,40 +258,69 @@ class GeminiService:
         model_name: Optional[str] = None,
         retries: int = 3,
     ) -> dict:
-        """Extract structured data from text content (PDF with text layer)."""
-        self._configure(api_key)
+        """Extract structured data from text content with key rotation on quota error."""
         model_name = model_name or self.get_model_name()
-        model = genai.GenerativeModel(model_name)
-
         prompt = EXTRACTION_PROMPT + f"\n\nNội dung trang:\n{text}"
 
-        last_err = None
-        for attempt in range(retries):
-            try:
-                response = model.generate_content(
-                    prompt,
-                    generation_config={"response_mime_type": "application/json"},
-                )
-                raw = response.text.strip()
-                if raw.startswith("```"):
-                    raw = raw.split("\n", 1)[1] if "\n" in raw else raw
-                    raw = raw.rsplit("```", 1)[0].strip()
-                data = json.loads(raw)
-                for s in data.get("students", []):
-                    s["source_file"] = source_file
-                    s["page_number"] = page_number
-                return data
-            except Exception as e:
-                last_err = e
-                err_str = str(e)
-                if "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower():
-                    raise ValueError(
-                        f"Hết quota Gemini API: {err_str}"
+        while True:
+            if api_key:
+                current_key = api_key
+                key_idx = 0
+                key_masked = f"...{api_key[-4:]}" if len(api_key) >= 4 else "****"
+            else:
+                active_info = ai_settings_store.get_active_key()
+                if not active_info:
+                    raise AllKeysExhaustedError(
+                        "Tất cả API key Gemini trong kho đều đã hết hạn mức trong ngày (429 Quota Exceeded)."
                     )
-                if attempt < retries - 1:
-                    await asyncio.sleep(settings.RETRY_BASE_DELAY * (2 ** attempt))
+                current_key, key_idx, key_masked = active_info
 
-        raise RuntimeError(f"Gemini text extraction failed: {last_err}")
+            genai.configure(api_key=current_key)
+            model = genai.GenerativeModel(model_name)
+            key_exhausted = False
+            last_err = None
+
+            for attempt in range(retries):
+                try:
+                    response = model.generate_content(
+                        prompt,
+                        generation_config={"response_mime_type": "application/json"},
+                    )
+                    raw = response.text.strip()
+                    if raw.startswith("```"):
+                        raw = raw.split("\n", 1)[1] if "\n" in raw else raw
+                        raw = raw.rsplit("```", 1)[0].strip()
+                    data = json.loads(raw)
+                    for s in data.get("students", []):
+                        s["source_file"] = source_file
+                        s["page_number"] = page_number
+
+                    if not api_key:
+                        ai_settings_store.mark_key_success(key_idx)
+                    return data
+                except Exception as e:
+                    last_err = e
+                    err_str = str(e)
+                    is_quota = "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower() or "429" in err_str
+                    if is_quota:
+                        logger.warning(
+                            f"[KeyRotation] Key #{key_idx + 1} ({key_masked}) đã cạn quota (429) khi đọc text! "
+                            f"Đang tự động chuyển sang API key tiếp theo trong kho..."
+                        )
+                        if not api_key:
+                            ai_settings_store.mark_key_exhausted(key_idx, reason=f"429 Quota Exceeded ({err_str[:120]})")
+                            key_exhausted = True
+                            break
+                        else:
+                            raise ValueError(f"Hết quota Gemini API: {err_str}")
+
+                    if attempt < retries - 1:
+                        await asyncio.sleep(settings.RETRY_BASE_DELAY * (2 ** attempt))
+
+            if key_exhausted:
+                continue
+
+            raise RuntimeError(f"Gemini text extraction failed: {last_err}")
 
 
 gemini_service = GeminiService()

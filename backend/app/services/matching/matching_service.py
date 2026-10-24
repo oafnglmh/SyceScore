@@ -163,6 +163,33 @@ def normalize_class_name(name: Optional[str]) -> str:
     return re.sub(r"[\s\.\-_/]", "", s).upper()
 
 
+def classes_match(cls_a: Optional[str], cls_b: Optional[str]) -> bool:
+    """
+    Check if two class names match, handling variations such as:
+      - 'AV32.1B2' vs 'AV32.1B2HCM' (location suffix HCM, HN, DN...)
+      - 'AV32.1B2HCM1D' vs 'AV32.1B2HCM'
+    """
+    norm_a = normalize_class_name(cls_a)
+    norm_b = normalize_class_name(cls_b)
+    if not norm_a or not norm_b:
+        return False
+    if norm_a == norm_b:
+        return True
+
+    # Strip common location or section suffixes: HCM, HN, DN, CT, BD, VT, QN, TH...
+    strip_suffix = lambda s: re.sub(r"(HCM|HN|DN|CT|BD|VT|QN|TH|\d+[A-Z]|\d+)$", "", s)
+    sa = strip_suffix(norm_a)
+    sb = strip_suffix(norm_b)
+    if sa and sb:
+        if sa == sb:
+            return True
+        if sa.startswith(sb) or sb.startswith(sa):
+            return True
+    if norm_a.startswith(norm_b) or norm_b.startswith(norm_a):
+        return True
+    return False
+
+
 # ─── Matching Result Wrapper ──────────────────────────────────────────────────
 
 class MatchingResult(tuple):
@@ -347,7 +374,11 @@ class MatchingService:
                 kept_students_b.append(s_b)
                 continue
 
-            if norm_cls_b in valid_classes_in_a:
+            matches_class_in_a = (
+                norm_cls_b in valid_classes_in_a
+                or any(classes_match(cls_b, a_c) for a_c in a_raw_classes_by_subject.get(matching_subj_a, set()))
+            )
+            if matches_class_in_a:
                 # Class matches Option A -> KEEP
                 kept_students_b.append(s_b)
             else:
@@ -534,9 +565,8 @@ class MatchingService:
             for cls_name, cls_students_a in a_by_class.items():
                 cls_students_b = b_by_class.get(cls_name, [])
                 if not cls_students_b:
-                    norm_cls = normalize_class_name(cls_name)
                     for b_cname, b_clist in b_by_class.items():
-                        if normalize_class_name(b_cname) == norm_cls:
+                        if classes_match(cls_name, b_cname):
                             cls_students_b = b_clist
                             break
                 if not cls_students_b and len(b_by_class) == 1:
@@ -702,6 +732,8 @@ class MatchingService:
                     reason="Học phần chưa được xác nhận tương ứng giữa 2 nguồn",
                     source_file_a=s_a.source_file,
                     source_page_a=s_a.page_number,
+                    cross_confidence=s_a.cross_confidence,
+                    ocr_engine=s_a.ocr_engine,
                 ))
                 stt_counter += 1
                 continue
@@ -728,6 +760,8 @@ class MatchingService:
                     reason="Thiếu Mã HV ở nguồn A",
                     source_file_a=s_a.source_file,
                     source_page_a=s_a.page_number,
+                    cross_confidence=s_a.cross_confidence,
+                    ocr_engine=s_a.ocr_engine,
                 ))
                 stt_counter += 1
                 continue
@@ -754,6 +788,8 @@ class MatchingService:
                     reason="Mã HV trùng lặp trong nguồn A",
                     source_file_a=s_a.source_file,
                     source_page_a=s_a.page_number,
+                    cross_confidence=s_a.cross_confidence,
+                    ocr_engine=s_a.ocr_engine,
                 ))
                 stt_counter += 1
                 continue
@@ -781,6 +817,8 @@ class MatchingService:
                     reason="Không tìm thấy điểm ở nguồn B",
                     source_file_a=s_a.source_file,
                     source_page_a=s_a.page_number,
+                    cross_confidence=s_a.cross_confidence,
+                    ocr_engine=s_a.ocr_engine,
                 ))
                 stt_counter += 1
                 continue
@@ -807,6 +845,8 @@ class MatchingService:
                     reason="Mã HV trùng lặp trong nguồn B",
                     source_file_a=s_a.source_file,
                     source_page_a=s_a.page_number,
+                    cross_confidence=s_a.cross_confidence,
+                    ocr_engine=s_a.ocr_engine,
                 ))
                 for bm in b_matches:
                     matched_b_ids.add(id(bm))
@@ -874,6 +914,8 @@ class MatchingService:
                 source_page_a=s_a.page_number,
                 source_file_b=s_b.source_file,
                 source_page_b=s_b.page_number,
+                cross_confidence=s_a.cross_confidence,
+                ocr_engine=s_a.ocr_engine,
             ))
             stt_counter += 1
 

@@ -4,7 +4,7 @@ import { ProgressStepper } from '../components/ProgressStepper'
 import { useToast } from '../components/Toast'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Play } from 'lucide-react'
+import { AlertCircle, Play, RefreshCw } from 'lucide-react'
 
 const POLL_INTERVAL_MS = 2000
 
@@ -18,6 +18,7 @@ export default function NewReconciliationPage() {
   const [phase, setPhase] = useState('idle') // idle | uploading | processing | done | error
   const [progress, setProgress] = useState(null)
   const [error, setError] = useState(null)
+  const [warningMessage, setWarningMessage] = useState(null)
   const pollRef = useRef(null)
 
   const addFiles = useCallback((source, entries) => {
@@ -41,6 +42,8 @@ export default function NewReconciliationPage() {
   const startReconciliation = async () => {
     setPhase('uploading')
     setError(null)
+    setWarningMessage(null)
+    setProgress(null)
     try {
       const formData = new FormData()
       if (sessionName.trim()) formData.append('session_name', sessionName.trim())
@@ -67,15 +70,27 @@ export default function NewReconciliationPage() {
         const prog = res.data
         setProgress(prog)
 
+        // Detect key-rotation warning from message field
+        if (prog.warning_message) {
+          setWarningMessage(prog.warning_message)
+        } else if (
+          prog.message &&
+          (prog.message.toLowerCase().includes('fallback') ||
+            prog.message.toLowerCase().includes('paddle') ||
+            prog.message.toLowerCase().includes('api key'))
+        ) {
+          setWarningMessage(prog.message)
+        }
+
         if (prog.status === 'completed') {
           clearInterval(pollRef.current)
           setPhase('done')
-          // Navigate to extracted data preview
           navigate(`/reconcile/${id}/preview`)
         } else if (prog.status === 'error') {
           clearInterval(pollRef.current)
           const errMsg = prog.error_message || 'Lỗi xử lý không xác định'
-          toast.error(errMsg)
+          // Keep phase as 'error' — progress panel stays visible
+          setError(errMsg)
           setPhase('error')
         }
       } catch (e) {
@@ -84,6 +99,7 @@ export default function NewReconciliationPage() {
           toast.error(`Mất kết nối đến máy chủ: ${e.message}`)
           clearInterval(pollRef.current)
           setPhase('error')
+          setError('Mất kết nối đến máy chủ. Vui lòng kiểm tra kết nối và thử lại.')
         }
       }
     }, POLL_INTERVAL_MS)
@@ -96,6 +112,8 @@ export default function NewReconciliationPage() {
   }, [])
 
   const isProcessing = phase === 'uploading' || phase === 'processing'
+  // Show the progress panel whenever we are beyond idle (processing, error, or done)
+  const showProgress = phase !== 'idle'
 
   return (
     <div className="px-8 py-8 max-w-4xl">
@@ -156,7 +174,7 @@ export default function NewReconciliationPage() {
 
       {/* Action + Progress */}
       <div className="panel p-6">
-        {phase === 'idle' || phase === 'error' ? (
+        {!showProgress ? (
           <div className="flex items-center justify-between">
             <div className="text-sm text-slate-500">
               {filesA.filter((f) => !f.error).length} file nguồn A ·{' '}
@@ -178,10 +196,42 @@ export default function NewReconciliationPage() {
               <h3 className="text-sm font-semibold text-slate-700 mb-4">
                 Tiến trình xử lý
               </h3>
+
+              {/* Error banner — stays inside the progress panel */}
+              {phase === 'error' && error && (
+                <div className="flex items-start gap-2 mb-4 p-3 rounded-md bg-red-50 border border-red-200">
+                  <AlertCircle size={15} className="shrink-0 mt-0.5 text-red-500" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-red-700">Xử lý thất bại</p>
+                    <p className="text-xs text-red-600 mt-0.5 break-words">{error}</p>
+                  </div>
+                </div>
+              )}
+
               <ProgressStepper
                 currentStep={progress?.current_step || 'upload'}
                 progress={progress}
+                isError={phase === 'error'}
+                warningMessage={warningMessage}
               />
+
+              {/* Retry button after error */}
+              {phase === 'error' && (
+                <button
+                  type="button"
+                  className="mt-5 btn btn-secondary text-sm flex items-center gap-1.5"
+                  onClick={() => {
+                    setPhase('idle')
+                    setError(null)
+                    setWarningMessage(null)
+                    setProgress(null)
+                    setSessionId(null)
+                  }}
+                >
+                  <RefreshCw size={13} />
+                  Thử lại
+                </button>
+              )}
             </div>
             <div className="w-px bg-slate-100" />
             <div className="w-48 text-sm text-slate-500 space-y-2 pt-1">
