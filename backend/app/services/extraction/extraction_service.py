@@ -780,9 +780,10 @@ class ExtractionService:
           - ollama:        LLaVA:7b qua Ollama (gui anh)
           - paddle_ollama: PaddleOCR → Layout → Ollama text (pipeline moi)
         """
-        _check_ai_configured(filename)
         provider = ai_settings_store.get_ocr_provider()
         ext = file_path.suffix.lower()
+
+        _check_ai_configured(filename)
 
         # ── PDF ───────────────────────────────────────────────────────────────
         if ext == ".pdf":

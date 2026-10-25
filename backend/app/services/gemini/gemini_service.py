@@ -31,7 +31,11 @@ Yêu cầu quan trọng:
 - Nếu không đọc được rõ ràng, đặt giá trị là null và ghi lý do vào review_reason
 - Nếu có chữ viết tay khó đọc hoặc nhiều cách đọc, đặt needs_review = true
 - Điểm số: chỉ lấy điểm thi, không lấy chữ ký, số tờ giấy, hay điểm thành phần
-- Mã HV: mã số học viên, thường là dãy số
+- Student ID may contain letters, digits, and periods; preserve the full value exactly.
+- For CCE system score tables, read the score from the "Ktra1" column. "KtraNgayEdit" is an edit date, never a score.
+- CCE student IDs may contain letters, digits, and periods (for example, AV33.1B2TGTID004). Preserve the full ID exactly; do not reject or skip a row because its ID is not numeric.
+- If a grade sheet has "So" and "Chu" columns, use the numeric "So" value as the score and ignore its written-out duplicate in "Chu".
+- Extract every visible student row from every subject/class table on the page. When rows are visible, include them in "students" and use null only for fields individually unreadable.
 - exam_location và room là hai trường khác nhau
 - confidence: 0.0 đến 1.0, đánh giá độ chắc chắn khi đọc từng trường
 
