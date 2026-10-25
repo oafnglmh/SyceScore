@@ -61,6 +61,10 @@ export default function AISettingsPage() {
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState(null)
 
+  const notifyBlockedEngine = (engine) => {
+    toast.warning(`Hoàng khóa nút này rồi 😅 ${engine} đang bị chê “phế” nên bấm cũng không đổi đâu. Qua Gemini giúp Hoàng nha!`)
+  }
+
   useEffect(() => {
     loadSettings()
     loadModels()
@@ -269,7 +273,7 @@ export default function AISettingsPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {/* PaddleOCR + Ollama Option (Recommended) */}
           <div
-            onClick={() => setOcrProvider('paddle_ollama')}
+            onClick={() => notifyBlockedEngine('PaddleOCR + Ollama Text')}
             className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
               ocrProvider === 'paddle_ollama'
                 ? 'border-emerald-500 bg-emerald-50/40 shadow-sm ring-1 ring-emerald-500'
@@ -345,7 +349,7 @@ export default function AISettingsPage() {
 
           {/* Ollama Vision Direct Option */}
           <div
-            onClick={() => setOcrProvider('ollama')}
+            onClick={() => notifyBlockedEngine('LLaVA:7b Vision Direct')}
             className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
               ocrProvider === 'ollama'
                 ? 'border-indigo-500 bg-indigo-50/40 shadow-sm ring-1 ring-indigo-500'
