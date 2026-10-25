@@ -20,11 +20,7 @@ const LONG_WAIT_SEC    = 25      // switch to "hơi ngái ngủ" message
 
 // ─── Sub-message rotation ─────────────────────────────────────────────────────
 const MESSAGES = [
-  { text: 'Server đang ngủ vì dùng Render Free hehe 💤', min: 0  },
-  { text: 'Đợi xíu nha, mình đang gọi server dậy đây... ☕', min: 6  },
-  { text: 'Server hơi ngái ngủ một tí, kiên nhẫn nha bạn 🥹', min: LONG_WAIT_SEC },
-  { text: 'Cà phê đâu rồi, server ơi 🫖', min: 45 },
-  { text: 'Vẫn đang chờ... Server đang mặc đồ vào đây 👔', min: 70 },
+  { text: 'Vui lòng liên hệ LÊ MINH HOÀNG để bật lại server nhé', min: 0 },
 ]
 
 function getSubMessage(elapsed) {
@@ -286,7 +282,7 @@ export default function ServerWakeUp({ onReady, onDismiss }) {
           >
             {awake
               ? 'Dậy rồi nè! Vào hệ thống thôi 🚀'
-              : 'Đợi hệ thống chạy server đã nha 😴'}
+              : 'Server hiện chưa hoạt động'}
           </h1>
 
           {/* ── Sub-message ────────────────────────────────────────────── */}
