@@ -146,7 +146,7 @@ class GeminiService:
             self._configure(api_key)
             model_name = model or self.get_model_name()
             m = genai.GenerativeModel(model_name)
-            resp = m.generate_content("Trả lời: OK")
+            resp = await asyncio.to_thread(m.generate_content, "Trả lời: OK")
             if resp.text:
                 return {
                     "success": True,
@@ -204,7 +204,8 @@ class GeminiService:
             for attempt in range(retries):
                 try:
                     image_part = {"mime_type": mime_type, "data": image_bytes}
-                    response = model.generate_content(
+                    response = await asyncio.to_thread(
+                        model.generate_content,
                         [EXTRACTION_PROMPT, image_part],
                         generation_config={"response_mime_type": "application/json"},
                     )
@@ -282,7 +283,8 @@ class GeminiService:
 
             for attempt in range(retries):
                 try:
-                    response = model.generate_content(
+                    response = await asyncio.to_thread(
+                        model.generate_content,
                         prompt,
                         generation_config={"response_mime_type": "application/json"},
                     )

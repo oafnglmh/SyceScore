@@ -63,7 +63,10 @@ export default function NewReconciliationPage() {
 
   const startPolling = (id) => {
     let failCount = 0
+    let inFlight = false
     pollRef.current = setInterval(async () => {
+      if (inFlight) return
+      inFlight = true
       try {
         const res = await reconciliationApi.getProgress(id)
         failCount = 0
@@ -97,10 +100,13 @@ export default function NewReconciliationPage() {
         failCount += 1
         if (failCount >= 8) {
           toast.error(`Mất kết nối đến máy chủ: ${e.message}`)
+          console.log(`Mất kết nối đến máy chủ: ${e.message}`)
           clearInterval(pollRef.current)
           setPhase('error')
           setError('Mất kết nối đến máy chủ. Vui lòng kiểm tra kết nối và thử lại.')
         }
+      } finally {
+        inFlight = false
       }
     }, POLL_INTERVAL_MS)
   }
