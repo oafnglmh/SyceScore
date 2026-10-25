@@ -13,6 +13,7 @@ Nguyen tac:
 from __future__ import annotations
 
 import logging
+import re
 import statistics
 from typing import Optional
 
@@ -109,12 +110,15 @@ class PageLayoutResult:
         lines = []
 
         if self.pre_table_text:
-            lines.append("=== THONG TIN KY THI ===")
+            lines.append("=== THONG TIN TRUOC BANG DAU TIEN (CO THE GOM TEN LOP) ===")
             lines.extend(self.pre_table_text)
             lines.append("")
 
         for i, table in enumerate(self.tables):
             lines.append(f"=== BANG {i+1} ===")
+            if table.pre_table_text:
+                lines.append("TEN LOP / THONG TIN NGAY TREN BANG NAY:")
+                lines.extend("  " + line for line in table.pre_table_text)
             if table.header_rows:
                 lines.append("TIEU DE COT:")
                 for hr in table.header_rows:
@@ -209,7 +213,7 @@ _HEADER_KEYWORDS = {
     "ma hv", "ma sv", "ma hoc vien", "ma sinh vien", "masv", "mahv",
     "ho va ten", "ho ten",
     "ngay sinh",
-    "diem", "diem so", "diem thi", "ket qua", "thi l1",
+    "diem", "diem so", "diem thi", "ket qua", "thi l1", "ktra1", "ktrangayedit",
     "ghi chu",
 }
 
@@ -242,6 +246,28 @@ def _detect_table_start(rows: list[TableRow]) -> int:
         if _is_header_row(row):
             return i
     return -1
+
+
+def _is_table_title_row(row: TableRow) -> bool:
+    """Recognize class/subject labels printed between adjacent table blocks."""
+    text = _normalize_for_match(row.text)
+    if _is_header_row(row):
+        return False
+    return any(keyword in text for keyword in ("lop", "class:", "hoc phan", "mon thi"))
+
+
+def _looks_like_student_data_row(row: TableRow) -> bool:
+    """Detect a row with a likely ID so a bare class code can remain table context."""
+    text = row.text
+    return bool(
+        re.search(r"\b[A-Z]{2,}\d[\w.\-]{3,}\d{2,}\b", text, re.IGNORECASE)
+        or re.search(r"\b\d{6,}\b", text)
+    )
+
+
+def _looks_like_bare_class_code(row: TableRow) -> bool:
+    text = _normalize_for_match(row.text).strip()
+    return bool(re.fullmatch(r"[a-z]{2,}\d+(?:[.\-][a-z0-9]+)+|[a-z]{2,}-\d{1,4}", text))
 
 
 # --- Main reconstruction logic ---
@@ -325,54 +351,64 @@ def reconstruct_page_layout(
             warnings=warnings,
         )
 
-    # Phan truoc bang = metadata ky thi
+    # Thong tin truoc bang dau tien (thuong co ten lop in o tren bang).
     pre_table_rows = all_rows[:table_start_idx]
-    table_rows = all_rows[table_start_idx:]
-
     pre_table_text = [r.text for r in pre_table_rows if r.text.strip()]
+    # A single page may contain multiple class tables. Split repeated headers,
+    # moving an intervening class title onto the following table.
+    tables: list[ReconstructedTable] = []
+    cursor = table_start_idx
+    pending_title: list[str] = []
+    while cursor < len(all_rows):
+        if not _is_header_row(all_rows[cursor]):
+            cursor += 1
+            continue
 
-    # Buoc 4: Phan biet hang tieu de va hang du lieu
-    header_rows: list[TableRow] = []
-    data_rows: list[TableRow] = []
+        header_rows = [all_rows[cursor]]
+        data_start = cursor + 1
+        while data_start < len(all_rows) and data_start <= cursor + 3 and _is_header_row(all_rows[data_start]):
+            header_rows.append(all_rows[data_start])
+            data_start += 1
 
-    i = 0
-    while i < len(table_rows) and i < 4:
-        if _is_header_row(table_rows[i]):
-            header_rows.append(table_rows[i])
-            i += 1
-        else:
-            break
-
-    if not header_rows:
-        warnings.append(
-            f"Trang {page_number}: Khong xac dinh duoc hang tieu de bang ro rang."
+        next_header = next(
+            (index for index in range(data_start, len(all_rows)) if _is_header_row(all_rows[index])),
+            len(all_rows),
         )
+        section_rows = [row for row in all_rows[data_start:next_header] if row.text.strip()]
+        next_title: list[str] = []
+        if next_header < len(all_rows):
+            while section_rows and (
+                (_is_table_title_row(section_rows[-1]) or _looks_like_bare_class_code(section_rows[-1]))
+                and not _looks_like_student_data_row(section_rows[-1])
+            ):
+                next_title.insert(0, section_rows.pop().text)
 
-    # Phan con lai la du lieu
-    data_rows = table_rows[i:]
-    data_rows = [r for r in data_rows if r.text.strip()]
+        table = ReconstructedTable(
+            header_rows=header_rows,
+            data_rows=section_rows,
+            pre_table_text=pending_title,
+            warnings=[],
+        )
+        tables.append(table)
+        pending_title = next_title
+        cursor = next_header
 
-    if not data_rows:
+    if not tables:
+        warnings.append(f"Trang {page_number}: Khong xac dinh duoc hang tieu de bang ro rang.")
+    elif not any(table.data_rows for table in tables):
         warnings.append(f"Trang {page_number}: Khong co hang du lieu nao trong bang.")
 
-    table = ReconstructedTable(
-        header_rows=header_rows,
-        data_rows=data_rows,
-        pre_table_text=pre_table_text,
-        warnings=[],
-    )
-
     logger.info(
-        f"[Layout] Trang {page_number}: "
-        f"{len(header_rows)} hang tieu de, "
-        f"{len(data_rows)} hang du lieu, "
-        f"{len(pre_table_text)} dong metadata."
+        f"[Layout] Trang {page_number}: {len(tables)} bang, "
+        f"{sum(len(table.header_rows) for table in tables)} hang tieu de, "
+        f"{sum(len(table.data_rows) for table in tables)} hang du lieu, "
+        f"{len(pre_table_text)} dong thong tin truoc bang dau tien."
     )
 
     return PageLayoutResult(
         page_number=page_number,
         pre_table_text=pre_table_text,
-        tables=[table],
+        tables=tables,
         all_rows=all_rows,
         warnings=warnings,
     )

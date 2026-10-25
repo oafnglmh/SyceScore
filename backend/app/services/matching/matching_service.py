@@ -292,8 +292,12 @@ class MatchingService:
         # 1. Map each subject in Source A to its set of normalized class names and raw class names
         a_classes_by_subject: dict[str, set[str]] = {}
         a_raw_classes_by_subject: dict[str, set[str]] = {}
+        a_student_ids_by_subject: dict[str, set[str]] = {}
         for s in source_a.students:
             subj = s.subject or (source_a.exam_metadata.subject if source_a.exam_metadata else None) or "Học phần chưa xác định"
+            sid = _normalize_student_id(s.student_id)
+            if sid:
+                a_student_ids_by_subject.setdefault(subj, set()).add(sid)
             cls_name = s.class_name or (source_a.exam_metadata.class_name if source_a.exam_metadata else None)
             if cls_name:
                 norm_c = normalize_class_name(cls_name)
@@ -378,6 +382,16 @@ class MatchingService:
                 norm_cls_b in valid_classes_in_a
                 or any(classes_match(cls_b, a_c) for a_c in a_raw_classes_by_subject.get(matching_subj_a, set()))
             )
+            sid_b = _normalize_student_id(s_b.student_id)
+            if (
+                not matches_class_in_a
+                and sid_b
+                and sid_b in a_student_ids_by_subject.get(matching_subj_a, set())
+            ):
+                # A row-level student ID is stronger evidence than a different
+                # internal class code used by the system export.
+                matches_class_in_a = True
+
             if matches_class_in_a:
                 # Class matches Option A -> KEEP
                 kept_students_b.append(s_b)
@@ -561,6 +575,7 @@ class MatchingService:
 
             class_groups: list[ClassGroup] = []
             subject_all_rows: list[ComparisonRow] = []
+            fallback_class_assignments: set[str] = set()
 
             for cls_name, cls_students_a in a_by_class.items():
                 cls_students_b = b_by_class.get(cls_name, [])
@@ -569,6 +584,28 @@ class MatchingService:
                         if classes_match(cls_name, b_cname):
                             cls_students_b = b_clist
                             break
+                if not cls_students_b:
+                    a_ids = {_normalize_student_id(s.student_id) for s in cls_students_a}
+                    a_ids.discard(None)
+                    candidates = []
+                    for b_cname, b_clist in b_by_class.items():
+                        if b_cname in fallback_class_assignments:
+                            continue
+                        b_ids = {_normalize_student_id(s.student_id) for s in b_clist}
+                        b_ids.discard(None)
+                        shared_ids = a_ids & b_ids
+                        denominator = min(len(a_ids), len(b_ids))
+                        coverage = len(shared_ids) / denominator if denominator else 0.0
+                        if coverage >= 0.5:
+                            candidates.append((coverage, len(shared_ids), b_cname, b_clist))
+                    candidates.sort(key=lambda item: (item[0], item[1]), reverse=True)
+                    if candidates and (
+                        len(candidates) == 1
+                        or (candidates[0][0], candidates[0][1]) > (candidates[1][0], candidates[1][1])
+                    ):
+                        _, _, matched_b_class, cls_students_b = candidates[0]
+                        fallback_class_assignments.add(matched_b_class)
+
                 if not cls_students_b and len(b_by_class) == 1:
                     single_b_name = list(b_by_class.keys())[0]
                     # Only fallback if the single class in B is unlabeled/unspecified

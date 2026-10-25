@@ -4,7 +4,9 @@ Generates a multi-sheet workbook with proper formatting.
 """
 from datetime import datetime
 from io import BytesIO
+import re
 from typing import Optional
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from openpyxl import Workbook
 from openpyxl.styles import (
@@ -71,7 +73,7 @@ def _status_fill(status: ComparisonStatus):
 
 
 def _thin_border():
-    thin = Side(style="thin", color="D1D5DB")
+    thin = Side(style="thin", color="CBD5E1")
     return Border(bottom=thin)
 
 
@@ -80,7 +82,7 @@ def _set_header_row(ws, headers: list[str], row: int = 1):
         cell = ws.cell(row=row, column=col, value=header)
         cell.font = _header_font()
         cell.fill = _header_fill()
-        cell.alignment = Alignment(wrap_text=False, vertical="center")
+        cell.alignment = Alignment(horizontal="center", wrap_text=False, vertical="center")
     ws.row_dimensions[row].height = 20
 
 
@@ -105,39 +107,165 @@ def _freeze_and_filter(ws, freeze_row: int = 2, filter_ref: Optional[str] = None
 
 class ExcelExportService:
 
-    def generate_workbook(self, session: ReconciliationSession) -> bytes:
+    TEMPLATE_HEADERS = [
+        "STT", "M\u00e3 HV", "H\u1ecd v\u00e0 t\u00ean", "Ng\u00e0y sinh", "H\u1ecdc k\u1ef3",
+        "H\u1ecdc ph\u1ea7n thi", "L\u1edbp", "Ng\u00e0nh", "\u0110\u1ecba \u0111i\u1ec3m thi", "Ph\u00f2ng thi",
+        "\u0110i\u1ec3m s\u1ed1 ngu\u1ed3n A",
+    ]
+    TEMPLATE_WIDTHS = [8, 15, 23, 13, 9, 23, 11, 15, 40, 12, 18]
+
+    @staticmethod
+    def _student_class(student, session) -> str:
+        source_meta = session.source_a.exam_metadata if session.source_a else None
+        return str(
+            student.class_name
+            or (source_meta.class_name if source_meta else None)
+            or (session.metadata.class_name if session.metadata else None)
+            or "L\u1edbp ch\u01b0a x\u00e1c \u0111\u1ecbnh"
+        ).strip()
+
+    @staticmethod
+    def _student_major(student, session) -> str:
+        source_meta = session.source_a.exam_metadata if session.source_a else None
+        return str(
+            student.major
+            or (source_meta.major if source_meta else None)
+            or (session.metadata.major if session.metadata else None)
+            or "Ng\u00e0nh ch\u01b0a x\u00e1c \u0111\u1ecbnh"
+        ).strip()
+
+    @staticmethod
+    def _safe_filename_part(value: str) -> str:
+        value = re.sub(r'[<>:"/\\|?*]+', "", value).strip().rstrip(".")
+        value = re.sub(r"\s+", "_", value)
+        return value or "Chua_xac_dinh"
+
+    def filename_for(self, class_name: str, major: str) -> str:
+        return f"{self._safe_filename_part(class_name)}_{self._safe_filename_part(major)}.xlsx"
+
+    def export_groups(self, session: ReconciliationSession) -> list[tuple[str, str]]:
+        source = session.source_a
+        if not source:
+            return []
+        groups = {
+            (self._student_class(student, session), self._student_major(student, session))
+            for student in source.students
+        }
+        if not groups and session.metadata:
+            groups.add((
+                session.metadata.class_name or "L\u1edbp ch\u01b0a x\u00e1c \u0111\u1ecbnh",
+                session.metadata.major or "Ng\u00e0nh ch\u01b0a x\u00e1c \u0111\u1ecbnh",
+            ))
+        return sorted(groups)
+
+    def generate_export(
+        self,
+        session: ReconciliationSession,
+        class_name: Optional[str] = None,
+        major: Optional[str] = None,
+        subject: Optional[str] = None,
+    ) -> tuple[bytes, str, str]:
+        """Return one template workbook or a ZIP of workbooks for multiple classes."""
+        if class_name or major:
+            data = self.generate_workbook(session, class_name, major, subject)
+            groups = self.export_groups(session)
+            selected_group = next(
+                ((cls, maj) for cls, maj in groups
+                 if (not class_name or cls.casefold() == class_name.strip().casefold())
+                 and (not major or maj.casefold() == major.strip().casefold())),
+                None,
+            )
+            fallback = selected_group or (
+                class_name or (session.metadata.class_name if session.metadata else None) or "L\u1edbp ch\u01b0a x\u00e1c \u0111\u1ecbnh",
+                major or (session.metadata.major if session.metadata else None) or "Ng\u00e0nh ch\u01b0a x\u00e1c \u0111\u1ecbnh",
+            )
+            return data, self.filename_for(*fallback), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+        groups = self.export_groups(session)
+        if subject:
+            groups = [
+                (class_value, major_value)
+                for class_value, major_value in groups
+                if any(
+                    self._student_class(student, session) == class_value
+                    and self._student_major(student, session) == major_value
+                    and (student.subject or "").strip().casefold() == subject.strip().casefold()
+                    for student in session.source_a.students
+                )
+            ]
+        if len(groups) <= 1:
+            class_value, major_value = groups[0] if groups else (
+                (session.metadata.class_name if session.metadata else None) or "L\u1edbp ch\u01b0a x\u00e1c \u0111\u1ecbnh",
+                (session.metadata.major if session.metadata else None) or "Ng\u00e0nh ch\u01b0a x\u00e1c \u0111\u1ecbnh",
+            )
+            return (
+                self.generate_workbook(session, class_value, major_value, subject),
+                self.filename_for(class_value, major_value),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+
+        archive = BytesIO()
+        with ZipFile(archive, "w", ZIP_DEFLATED) as zipped:
+            for class_value, major_value in groups:
+                zipped.writestr(
+                    self.filename_for(class_value, major_value),
+                    self.generate_workbook(session, class_value, major_value, subject),
+                )
+        return archive.getvalue(), "DoiSoatDiem.zip", "application/zip"
+
+    def generate_workbook(
+        self,
+        session: ReconciliationSession,
+        class_name: Optional[str] = None,
+        major: Optional[str] = None,
+        subject: Optional[str] = None,
+    ) -> bytes:
         wb = Workbook()
-        # Remove default sheet
-        wb.remove(wb.active)
+        ws = wb.active
+        ws.title = "DoiSoatDiem"
+        _set_header_row(ws, self.TEMPLATE_HEADERS)
+        ws.row_dimensions[1].height = 22
 
-        rows = session.comparison_results
-        stats = session.stats
-        meta = session.metadata
+        source = session.source_a
+        metadata = source.exam_metadata if source else session.metadata
+        students = source.students if source else []
+        for student in students:
+            student_class = self._student_class(student, session)
+            student_major = self._student_major(student, session)
+            if class_name and student_class.casefold() != class_name.strip().casefold():
+                continue
+            if major and student_major.casefold() != major.strip().casefold():
+                continue
+            if subject and (student.subject or "").strip().casefold() != subject.strip().casefold():
+                continue
 
-        self._sheet_overview(wb, session, meta, stats)
-        self._sheet_detail(wb, rows, "Chi tiết đối soát")
+            score = student.score_normalized
+            if score is None:
+                try:
+                    score = float(str(student.score).replace(",", ".")) if student.score is not None else None
+                except (TypeError, ValueError):
+                    score = None
+            ws.append([
+                ws.max_row,
+                student.student_id or "",
+                student.full_name or "",
+                student.date_of_birth or "",
+                student.semester or (metadata.semester if metadata else None) or "",
+                student.subject or (metadata.subject if metadata else None) or "",
+                student_class,
+                student_major,
+                student.exam_location or (metadata.exam_location if metadata else None) or "",
+                student.room or (metadata.room if metadata else None) or "",
+                score,
+            ])
+            for cell in ws[ws.max_row]:
+                cell.font = _default_font()
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.border = _thin_border()
 
-        # Add dedicated sheet for each course section if there are multiple
-        if session.subject_groups:
-            existing_sheet_names = set(wb.sheetnames)
-            for sg in session.subject_groups:
-                for cg in sg.classes:
-                    if cg.comparison_rows:
-                        # Clean sheet name (max 31 chars in Excel)
-                        raw_name = f"{sg.subject_name[:12]}_{cg.class_name[:12]}".replace("/", "-").replace("\\", "-").replace(":", "-").replace("*", "").replace("?", "").strip()
-                        sheet_name = raw_name or "Lop_Hoc_Phan"
-                        idx = 2
-                        while sheet_name in existing_sheet_names:
-                            sheet_name = f"{raw_name[:27]}_{idx}"
-                            idx += 1
-                        existing_sheet_names.add(sheet_name)
-                        self._sheet_detail(wb, cg.comparison_rows, sheet_name)
-
-        self._sheet_issues(wb, rows)
-        if session.source_a:
-            self._sheet_source(wb, session.source_a, "Dữ liệu nguồn A")
-        if session.source_b:
-            self._sheet_source(wb, session.source_b, "Dữ liệu nguồn B")
+        for index, width in enumerate(self.TEMPLATE_WIDTHS, 1):
+            ws.column_dimensions[get_column_letter(index)].width = width
+        ws.freeze_panes = "A5"
 
         buf = BytesIO()
         wb.save(buf)

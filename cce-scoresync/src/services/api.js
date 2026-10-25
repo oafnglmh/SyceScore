@@ -48,10 +48,8 @@ export const reconciliationApi = {
   compare: (id) => client.post(`/reconciliations/${id}/compare`),
   getResults: (id, params) =>
     client.get(`/reconciliations/${id}/results`, { params }),
-  exportExcel: (id, subject) => {
-    const url = subject ? `/reconciliations/${id}/export?subject=${encodeURIComponent(subject)}` : `/reconciliations/${id}/export`
-    return client.get(url, { responseType: 'blob' })
-  },
+  exportExcel: (id, params) =>
+    client.get(`/reconciliations/${id}/export`, { params, responseType: 'blob' }),
   exportSubjectExcel: (id, subject) =>
     client.get(`/reconciliations/${id}/export?subject=${encodeURIComponent(subject)}`, { responseType: 'blob' }),
   exportZip: (id) =>

@@ -38,6 +38,8 @@ Phân tích ảnh và trả về JSON THUẦN TÚY (không có markdown, không 
   "students": [
     {
       "stt": 1,
+      "class_name": null,
+      "subject": null,
       "student_id": null,
       "full_name": null,
       "date_of_birth": null,
@@ -58,6 +60,11 @@ Phân tích ảnh và trả về JSON THUẦN TÚY (không có markdown, không 
 Yêu cầu:
 - CHỈ trả về JSON hợp lệ, KHÔNG thêm bất kỳ văn bản nào khác
 - Điểm số: chỉ lấy điểm thi cuối (dạng số: 8.5, 7, 4.25…)
+- Với bảng điểm CCE, lấy điểm từ cột Ktra1 (hoặc tên cột tương đương nhìn thấy được); KtraNgayEdit là ngày sửa, tuyệt đối không phải điểm.
+- Tên lớp có thể nằm thành một dòng tiêu đề ở PHÍA TRÊN mỗi bảng. Gán tiêu đề gần nhất phía trên cho mọi dòng sinh viên thuộc bảng ngay sau nó. Nếu một trang có nhiều bảng, mỗi bảng có thể là một lớp khác nhau.
+- Ghi class_name vào TỪNG student. Chỉ điền exam_metadata.class_name khi cả trang chỉ có một lớp; nếu có nhiều lớp thì để null ở metadata cấp trang.
+- Giữ riêng từng bảng/lớp. Cùng mã học viên hoặc STT có thể xuất hiện hợp lệ ở các lớp khác nhau; không gộp, không bỏ và không lặp lại dòng. STT có thể bắt đầu lại từ 1 ở mỗi bảng.
+- Ghép điểm với học viên trên cùng một hàng và đúng cột Ktra1. Trả đúng một đối tượng cho mỗi hàng dữ liệu nhìn thấy; không dừng ở bảng đầu tiên.
 - confidence: 0.0-1.0 cho từng trường
 - Nếu không đọc được rõ → null + needs_review: true"""
 

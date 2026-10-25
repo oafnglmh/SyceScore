@@ -5,6 +5,7 @@ import asyncio
 import uuid
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
@@ -228,22 +229,26 @@ async def get_results(
 
 
 @router.get("/{session_id}/export")
-async def export_excel(session_id: str):
+async def export_excel(
+    session_id: str,
+    class_name: Optional[str] = Query(default=None),
+    major: Optional[str] = Query(default=None),
+    subject: Optional[str] = Query(default=None),
+):
     session = session_store.get(session_id)
     if not session:
         raise HTTPException(404, "Phiên không tìm thấy")
     if session.status != ReconciliationStatus.COMPLETED:
         raise HTTPException(400, "Phiên chưa hoàn tất")
 
-    xlsx_bytes = excel_export_service.generate_workbook(session)
-    from datetime import datetime
-    ts = datetime.now().strftime("%Y%m%d_%H%M")
-    filename = f"CCE_ScoreSync_DoiSoat_{ts}.xlsx"
+    content, filename, media_type = excel_export_service.generate_export(
+        session, class_name=class_name, major=major, subject=subject
+    )
 
     return Response(
-        content=xlsx_bytes,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
     )
 
 

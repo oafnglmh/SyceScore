@@ -197,7 +197,7 @@ def validate_ollama_output(
             )
 
     # Phat hien ma HV trung lap
-    seen_ids: dict[str, int] = {}
+    seen_ids: dict[tuple[str, str, str], int] = {}
     normalized_students = []
 
     for idx, student in enumerate(students):
@@ -228,8 +228,11 @@ def validate_ollama_output(
         # Kiem tra ma HV trung lap
         if normalized_sid:
             sid_upper = normalized_sid.upper()
-            if sid_upper in seen_ids:
-                prev = seen_ids[sid_upper]
+            class_scope = str(student.get("class_name") or exam_info.get("class_name") or "").strip().casefold()
+            subject_scope = str(student.get("subject") or exam_info.get("subject") or "").strip().casefold()
+            duplicate_key = (subject_scope, class_scope, sid_upper)
+            if duplicate_key in seen_ids:
+                prev = seen_ids[duplicate_key]
                 result.add_warning(
                     f"Ma HV '{normalized_sid}' xuat hien lan 2 "
                     f"(hoc vien #{prev+1} va #{idx+1}). "
@@ -249,7 +252,7 @@ def validate_ollama_output(
                         normalized["review_reason"] + f" | Ma HV trung lap voi hang #{prev+1}"
                     )
             else:
-                seen_ids[sid_upper] = idx
+                seen_ids[duplicate_key] = idx
 
         # -- STT: phai la so nguyen hoac null --
         stt = student.get("stt")

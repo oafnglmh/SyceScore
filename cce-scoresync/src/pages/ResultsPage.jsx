@@ -162,14 +162,15 @@ export default function ResultsPage() {
 
   const stats = session?.stats || resultsData?.stats || {}
 
-  const handleExport = async (subjectFilter = null) => {
+  const handleExport = async (filters = null) => {
     setExporting(true)
     try {
-      const res = await reconciliationApi.exportExcel(id, subjectFilter)
-      const now = new Date()
-      const ts = now.toISOString().slice(0, 16).replace(/[-T:]/g, '').replace('', '_')
-      const filenameSuffix = subjectFilter ? `_${subjectFilter}` : ''
-      downloadBlob(res.data, `CCE_ScoreSync_DoiSoat${filenameSuffix}_${ts}.xlsx`)
+      const res = await reconciliationApi.exportExcel(id, filters || undefined)
+      const disposition = res.headers?.['content-disposition'] || ''
+      const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1]
+      const plainName = disposition.match(/filename="?([^";]+)"?/i)?.[1]
+      const filename = encodedName ? decodeURIComponent(encodedName) : (plainName || 'DoiSoatDiem.xlsx')
+      downloadBlob(res.data, filename)
       toast.success('Xuất Excel thành công.')
     } catch (e) {
       toast.error(`Xuất Excel thất bại: ${e.message}`)
@@ -420,7 +421,7 @@ export default function ResultsPage() {
               sortField={sortField}
               sortDir={sortDir}
               onSort={handleSort}
-              onExportExcel={() => handleExport(sec.subject)}
+              onExportExcel={() => handleExport({ subject: sec.subject })}
             />
           ))
         )}

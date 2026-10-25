@@ -42,7 +42,11 @@ QUY TAC TUYET DOI:
 5. Diem so: so thuc (float), null neu khong ro hoac o trong
 6. Ngay sinh: dinh dang YYYY-MM-DD neu du can cu, null neu khong ro
 7. Khong loai bo hang du lieu nao ke ca hang thieu truong
-8. STT: so nguyen theo thu tu trong bang"""
+8. STT: so nguyen theo thu tu trong bang
+9. Ten lop co the nam tren mot dong tieu de PHIA TREN bang; gan ten do cho tung dong sinh vien cua bang ngay ben duoi.
+10. Mot trang co the co nhieu bang/lop. Moi bang la mot nhom rieng; cung ma HV/STT co the lap lai giua cac lop. Khong gop, bo, hoac lap dong.
+11. Voi file diem CCE, lay diem dung cot Ktra1; KtraNgayEdit la ngay sua, khong phai diem. Ghep diem va ma HV tren cung dong.
+12. Doc het tat ca bang va tra dung mot student cho moi dong du lieu. STT co the bat dau lai o bang moi."""
 
 _EXTRACTION_PROMPT_TEMPLATE = """{system}
 
@@ -61,6 +65,8 @@ SCHEMA JSON YEU CAU:
   "students": [
     {{
       "stt": 1,
+      "class_name": null,
+      "subject": null,
       "student_id": "000123",
       "full_name": "Nguyen Van A",
       "date_of_birth": "2003-01-15",
@@ -77,6 +83,8 @@ NOI DUNG OCR CAN PHAN TICH:
 
 Tra ve JSON theo schema tren. Neu mot truong khong tim thay trong tai lieu, dat gia tri null.
 Neu mot o co van de (mo, kho doc, nhieu kha nang sai), dat needs_review: true va ghi ly do.
+Voi moi table trong NOI DUNG OCR, nhan ten lop in truoc table (neu co) va ghi vao class_name cua TUNG dong trong table. Tieu de lop co the xuat hien truoc tieu de cot; khong bo qua no. exam_info.class_name chi dung khi ca trang chi co mot lop.
+Trong moi table, doc dung cot Ktra1; khong lay gia tri ngay/thang tu cot KtraNgayEdit. Kiem dem dong du lieu tung table va tao dung mot student cho moi dong; khong lap student chi vi ma HV hoac STT xuat hien lai trong table/lop khac.
 """
 
 

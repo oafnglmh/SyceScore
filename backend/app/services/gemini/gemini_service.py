@@ -35,6 +35,11 @@ Yêu cầu quan trọng:
 - For CCE system score tables, read the score from the "Ktra1" column. "KtraNgayEdit" is an edit date, never a score.
 - CCE student IDs may contain letters, digits, and periods (for example, AV33.1B2TGTID004). Preserve the full ID exactly; do not reject or skip a row because its ID is not numeric.
 - If a grade sheet has "So" and "Chu" columns, use the numeric "So" value as the score and ignore its written-out duplicate in "Chu".
+- CCE exports can place the class name/title on a separate line ABOVE each table. Read that title as the class_name for every student row in the table immediately below it; do not expect the class name to repeat inside the rows.
+- A page may contain several class tables. Keep each table separate while reading: its heading applies only to that table, and a new heading starts a new class group. The same student ID or STT may legitimately appear in different class tables; do not merge those rows.
+- Put the class name on every student object. If several classes appear on one page, set exam_metadata.class_name to null instead of copying the first class name to all rows.
+- Read each score from the same horizontal row as its student ID/name, using the column heading "Ktra1" (or its visible equivalent). Never take a value from "KtraNgayEdit"; it is an edit date. Do not shift scores between rows or tables.
+- Return exactly one student object per visible data row. Do not repeat earlier rows to fill a table, and do not stop after the first table. STT may restart at 1 for each table.
 - Extract every visible student row from every subject/class table on the page. When rows are visible, include them in "students" and use null only for fields individually unreadable.
 - exam_location và room là hai trường khác nhau
 - confidence: 0.0 đến 1.0, đánh giá độ chắc chắn khi đọc từng trường
@@ -54,6 +59,8 @@ Trả về JSON với cấu trúc sau (đây là cấu trúc bắt buộc):
   "students": [
     {
       "stt": 1,
+      "class_name": null,
+      "subject": null,
       "student_id": null,
       "full_name": null,
       "date_of_birth": null,
