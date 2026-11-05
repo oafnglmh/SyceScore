@@ -1,173 +1,61 @@
 # CCE ScoreSync
 
-Hệ thống đối chiếu điểm thi tự động, sử dụng Gemini AI để trích xuất dữ liệu từ biên bản điểm viết tay và so sánh với dữ liệu đã nhập trên hệ thống CCE.
+Đọc điểm **viết tay** trên biên bản scan “Kết quả thi kết thúc học phần” bằng **AI CCE** và xuất ra Excel theo mẫu chuẩn.
+Ứng dụng chạy hoàn toàn trên trình duyệt (không có backend) – ảnh trang scan được gửi thẳng tới API của AI CCE (Google AI Studio).
 
-## Cấu trúc dự án
-
-```
-CCE/
-├── cce-scoresync/       # Frontend (React + Vite + Tailwind)
-└── backend/             # Backend (FastAPI + Python)
-    ├── app/
-    │   ├── api/         # API routes
-    │   ├── core/        # Config
-    │   ├── models/      # Pydantic schemas
-    │   ├── services/    # Business logic
-    │   │   ├── gemini/      # Gemini AI integration
-    │   │   ├── extraction/  # PDF/image extraction
-    │   │   ├── matching/    # Student matching algorithm
-    │   │   └── export/      # Excel export
-    │   └── storage/     # Session & settings persistence
-    ├── tests/           # Unit tests
-    ├── venv/            # Python virtual environment
-    ├── .env             # Environment config (from .env.example)
-    └── requirements.txt
-```
-
----
-
-## Cài đặt và chạy
-
-### Yêu cầu
-
-- Python 3.10+
-- Node.js 18+
-- Gemini API key (lấy tại https://aistudio.google.com/app/apikey)
-
----
-
-### 1. Backend (FastAPI)
+## Chạy
 
 ```bash
-# Di chuyển vào thư mục backend
-cd backend
-
-# Tạo virtual environment
-python -m venv venv
-
-# Kích hoạt venv
-# Windows:
-.\venv\Scripts\activate
-# Linux/macOS:
-source venv/bin/activate
-
-# Cài packages
-pip install -r requirements.txt
-
-# Tạo file .env từ template
-copy .env.example .env
-# Rồi mở .env và điền GEMINI_API_KEY của bạn
-
-# Chạy backend
-uvicorn app.main:app --reload --port 8000
-```
-
-Backend chạy tại: http://localhost:8000  
-API docs: http://localhost:8000/docs
-
----
-
-### 2. Frontend (React + Vite)
-
-```bash
-# Di chuyển vào thư mục frontend
 cd cce-scoresync
-
-# Cài dependencies (nếu chưa)
 npm install
-
-# Chạy development server
-npm run dev
+npm run dev        # http://localhost:5173
 ```
 
-Frontend chạy tại: http://localhost:5173
+### API key
 
-> Vite đã cấu hình proxy `/api` → `http://localhost:8000`, nên frontend và backend giao tiếp qua cùng origin.
+Mở file `cce-scoresync/public/api-keys.json` và dán key vào mảng `keys` (mỗi ô một key, ô trống tự bỏ qua):
 
----
-
-### 3. Cấu hình Gemini API
-
-Có hai cách cấu hình API key:
-
-**Cách 1 – File .env (khuyến nghị cho production):**
-```
-GEMINI_API_KEY=your_api_key_here
-GEMINI_MODEL=gemini-1.5-flash
+```json
+{
+  "model": "3.5-flash",
+  "concurrency": 4,
+  "keys": ["AIza...key1", "AIza...key2", "..."]
+}
 ```
 
-**Cách 2 – Giao diện Cài đặt AI:**  
-Vào menu "Cài đặt AI" trong ứng dụng → nhập API key → nhấn "Kiểm tra kết nối" → "Lưu cài đặt".
+- Hệ thống **xoay vòng** giữa các key. Key hết hạn mức trong ngày sẽ bị bỏ qua (được ghi nhớ tới khi Google reset quota),
+  key không hợp lệ bị loại, key chạm giới hạn/phút được tạm nghỉ rồi dùng lại.
+- Sửa file xong bấm biểu tượng 🔑 trên thanh tiêu đề → **Tải lại file key** (không cần khởi động lại).
+- Các key **cùng một Google Cloud project dùng chung hạn mức** – muốn nhân quota thì key phải thuộc các project/tài khoản khác nhau.
+- `api-keys.json` đã nằm trong `.gitignore`; mẫu trống ở `public/api-keys.example.json`. Khi `npm run build`, file này được
+  chép vào `dist/` – chỉ deploy bản build trong mạng nội bộ.
 
----
+## Quy trình
 
-### 4. Chạy unit tests
+1. Tải lên một hoặc nhiều file PDF scan (hoặc ảnh JPG/PNG).
+2. **Kiểm tra chéo**: mỗi trang được đọc **2 lần độc lập** (ảnh màu và ảnh xám tăng tương phản). Còn chỗ lệch – hoặc
+   điểm cột Số khác cột Chữ – thì đọc thêm có trọng tâm (tối đa **5 lần**) tới khi mọi trường có đa số rõ ràng (> 1/2).
+3. Kiểm tra tự động:
+   - điểm cột **Số** phải khớp cột **Chữ** (“chín ba” = 9.3);
+   - TT liên tục; số dòng khớp “Số học viên dự thi”, số người có điểm khớp “Số bài thi”;
+   - Mã HV bắt đầu bằng mã lớp, ngày sinh hợp lệ, không trùng Mã HV.
+4. Màn hình soát: mục nào chưa chắc chắn được tô màu, có ảnh trang scan bên cạnh (tự cuộn tới dòng). Sửa trực tiếp
+   hoặc bấm “Đã đối chiếu – đúng”.
+5. **Xuất Excel**: mỗi Lớp + Ngành một file `Lop_Nganh.xlsx` (nhiều lớp thì nén `DoiSoatDiem.zip`), cột:
+   `STT | Lớp | Ngành | Học phần thi | Ngày giờ thi | Mã HV | Họ và tên | Ngày sinh | Điểm`.
+   Học viên vắng thi để trống ô Điểm.
 
-```bash
-cd backend
-.\venv\Scripts\activate
-python -m pytest tests/ -v
+## Cấu trúc mã
+
 ```
-
----
-
-## Tính năng chính
-
-| Tính năng | Mô tả |
-|-----------|-------|
-| Tải file đa nguồn | PDF, JPG, JPEG, PNG – nhiều file mỗi nguồn |
-| OCR thông minh | Gemini AI đọc chữ viết tay, PDF scan |
-| Trích xuất có cấu trúc | Thông tin kỳ thi + danh sách học viên + điểm |
-| Xem trước & chỉnh sửa | Kiểm tra dữ liệu trích xuất trước khi đối soát |
-| Đối chiếu xác định | Ghép theo Mã HV, phát hiện trùng/thiếu/sai lệch |
-| Kết quả chi tiết | Bảng lọc/sắp xếp, tỷ lệ khớp có mẫu số rõ ràng |
-| Xuất Excel | 5 sheet: tổng quan, chi tiết, sai lệch, nguồn A, nguồn B |
-| Lịch sử | Lưu và xem lại các phiên đối soát đã thực hiện |
-
----
-
-## Quy trình đối soát
-
-1. **Tải file** → Chọn file nguồn A (biên bản viết tay) và nguồn B (điểm CCE)
-2. **Trích xuất** → Gemini AI phân tích từng trang
-3. **Xem trước** → Kiểm tra dữ liệu, chỉnh sửa nếu AI đọc sai
-4. **Đối soát** → Hệ thống ghép học viên theo Mã HV và so sánh điểm
-5. **Kết quả** → Xem bảng chi tiết, lọc theo trạng thái
-6. **Xuất Excel** → Tạo file báo cáo đầy đủ
-
----
-
-## Trạng thái đối soát
-
-| Trạng thái | Ý nghĩa |
-|-----------|---------|
-| `MATCH` | Điểm khớp nhau |
-| `MISMATCH` | Điểm khác nhau |
-| `MISSING_SOURCE_A` | Học viên chỉ có ở nguồn B |
-| `MISSING_SOURCE_B` | Học viên chỉ có ở nguồn A |
-| `DUPLICATE` | Mã HV trùng trong cùng nguồn |
-| `NEEDS_REVIEW` | Điểm chưa đọc được hoặc độ tin cậy thấp |
-
----
-
-## Bảo mật
-
-- API key **không** được lưu trong source code hay commit vào Git
-- API key được mã hóa khi lưu phía server
-- Frontend chỉ nhận được 4 ký tự cuối của key (để nhận biết)
-- Mọi yêu cầu đến Gemini đều đi qua backend
-
----
-
-## Môi trường phát triển
-
-| Công nghệ | Phiên bản |
-|-----------|-----------|
-| Python | 3.10+ |
-| FastAPI | 0.100+ |
-| React | 19 |
-| Vite | 8 |
-| Tailwind CSS | 4 |
-| google-generativeai | 0.7+ |
-| openpyxl | 3.1+ |
-| PyMuPDF | 1.23+ |
+cce-scoresync/src/
+├── App.jsx                  # Điều phối: tải lên → đọc → soát → xuất
+├── components/              # UploadView, ProcessingView, ReviewView, PageViewer, KeyStatusDialog, ui
+└── lib/
+    ├── ai.js                # Prompt, JSON schema, gọi API, thử lại khi 429/5xx
+    ├── keys.js              # Đọc api-keys.json, kho key xoay vòng, ghi nhớ key hết quota
+    ├── pages.js             # Tách PDF/ảnh thành ảnh trang (pdf.js)
+    ├── extract.js           # Bỏ phiếu giữa các lần đọc, ghép trang thành biên bản, kiểm tra
+    ├── score.js             # Chuẩn hóa điểm số, đọc điểm bằng chữ tiếng Việt
+    └── excel.js             # Xuất Excel/ZIP theo mẫu
+```

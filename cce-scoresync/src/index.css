@@ -1,135 +1,74 @@
 @import "tailwindcss";
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+/* Nhận diện Trung tâm Đào tạo Thường xuyên – ĐH Đà Nẵng: xanh navy logo CCE + vàng nhấn. */
+@theme {
+  --font-sans: 'Be Vietnam Pro', ui-sans-serif, system-ui, sans-serif;
+
+  --color-cce-50: #eef1fa;
+  --color-cce-100: #dbe1f4;
+  --color-cce-200: #b9c4ea;
+  --color-cce-300: #8e9fda;
+  --color-cce-400: #6176c6;
+  --color-cce-500: #3f55b0;
+  --color-cce-600: #2c4196;
+  --color-cce-700: #21317d;
+  --color-cce-800: #1b2867;
+  --color-cce-900: #152052;
+  --color-cce-950: #0d1436;
+
+  --color-gold-100: #fdf5d6;
+  --color-gold-200: #faeaa9;
+  --color-gold-300: #f6dc7e;
+  --color-gold-400: #f0cc46;
+  --color-gold-500: #ddb22a;
+  --color-gold-600: #b88d1d;
+
+  --animate-float: float 9s ease-in-out infinite;
+  --animate-shine: shine 2.4s linear infinite;
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-14px) rotate(2deg);
+  }
+}
+
+@keyframes shine {
+  from {
+    background-position: -200% 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
 
 @layer base {
-  *, *::before, *::after {
-    box-sizing: border-box;
-  }
-
   html {
-    font-family: 'Inter', system-ui, sans-serif;
     font-size: 14px;
-    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
   }
-
   body {
-    @apply bg-slate-50 text-slate-800 m-0 p-0;
-  }
-
-  h1, h2, h3, h4, h5, h6 {
-    @apply font-semibold leading-tight;
+    @apply m-0 bg-slate-50 text-slate-800;
   }
 }
 
 @layer components {
-  /* Status badges */
-  .badge {
-    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium;
+  /* Họa tiết vòng cung lấy cảm hứng từ logo CCE */
+  .cce-arcs {
+    background-image:
+      radial-gradient(circle at 100% 0%, transparent 38%, rgb(255 255 255 / 0.06) 38.4%, transparent 39%),
+      radial-gradient(circle at 100% 0%, transparent 46%, rgb(255 255 255 / 0.06) 46.4%, transparent 47%),
+      radial-gradient(circle at 100% 0%, transparent 54%, rgb(255 255 255 / 0.06) 54.4%, transparent 55%),
+      radial-gradient(circle at 100% 0%, transparent 62%, rgb(255 255 255 / 0.05) 62.4%, transparent 63%),
+      radial-gradient(circle at 100% 0%, transparent 70%, rgb(255 255 255 / 0.04) 70.4%, transparent 71%);
   }
-  .badge-match {
-    @apply bg-emerald-50 text-emerald-700 border border-emerald-200;
-  }
-  .badge-mismatch {
-    @apply bg-red-50 text-red-700 border border-red-200;
-  }
-  .badge-missing {
-    @apply bg-amber-50 text-amber-700 border border-amber-200;
-  }
-  .badge-review {
-    @apply bg-blue-50 text-blue-700 border border-blue-200;
-  }
-  .badge-duplicate {
-    @apply bg-purple-50 text-purple-700 border border-purple-200;
-  }
-
-  /* Table styles */
-  .data-table {
-    @apply w-full text-sm border-collapse;
-  }
-  .data-table th {
-    @apply text-left text-xs font-semibold text-slate-500 uppercase tracking-wide px-3 py-2 bg-slate-50 border-b border-slate-200;
-  }
-  .data-table td {
-    @apply px-3 py-2 border-b border-slate-100 text-slate-700;
-  }
-  .data-table tr:hover td {
-    @apply bg-slate-50;
-  }
-  .data-table tr.row-mismatch td {
-    @apply bg-red-50/50;
-  }
-  .data-table tr.row-review td {
-    @apply bg-amber-50/50;
-  }
-
-  /* Form controls */
-  .input {
-    @apply w-full px-3 py-2 text-sm border border-slate-200 rounded-md bg-white text-slate-800 
-           placeholder-slate-400 outline-none transition-colors
-           focus:border-blue-500 focus:ring-2 focus:ring-blue-100;
-  }
-  .input-error {
-    @apply border-red-400 focus:border-red-500 focus:ring-red-100;
-  }
-
-  /* Buttons */
-  .btn {
-    @apply inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors cursor-pointer border border-transparent;
-  }
-  .btn-primary {
-    @apply bg-slate-800 text-white hover:bg-slate-700;
-  }
-  .btn-secondary {
-    @apply bg-white text-slate-700 border-slate-200 hover:bg-slate-50;
-  }
-  .btn-danger {
-    @apply bg-red-600 text-white hover:bg-red-700;
-  }
-  .btn-ghost {
-    @apply text-slate-600 hover:bg-slate-100;
-  }
-  .btn:disabled {
-    @apply opacity-50 cursor-not-allowed;
-  }
-  .btn-sm {
-    @apply px-3 py-1.5 text-xs;
-  }
-
-  /* Cards / Panels */
-  .panel {
-    @apply bg-white border border-slate-200 rounded-lg;
-  }
-  .panel-header {
-    @apply px-5 py-4 border-b border-slate-100 flex items-center justify-between;
-  }
-  .panel-body {
-    @apply p-5;
-  }
-
-  /* Stat items */
-  .stat-item {
-    @apply flex flex-col gap-0.5;
-  }
-  .stat-label {
-    @apply text-xs text-slate-500 font-medium;
-  }
-  .stat-value {
-    @apply text-xl font-semibold text-slate-800;
-  }
-  .stat-value-sm {
-    @apply text-base font-semibold text-slate-800;
+  .shimmer {
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.55), transparent);
+    background-size: 200% 100%;
+    @apply animate-shine;
   }
 }
-
-@keyframes toast-in {
-  from { opacity: 0; transform: translateY(12px) scale(0.97); }
-  to   { opacity: 1; transform: translateY(0)    scale(1); }
-}
-
-@keyframes toast-out {
-  from { opacity: 1; transform: translateY(0)    scale(1); }
-  to   { opacity: 0; transform: translateY(8px)  scale(0.97); }
-}
-
