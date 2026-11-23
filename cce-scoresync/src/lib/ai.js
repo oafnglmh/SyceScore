@@ -134,13 +134,14 @@ const isV3Plus = (model) => parseFloat(modelVersion(model)) >= 3
 
 /**
  * pool: KeyPool (lib/keys.js) – dùng chung cho cả phiên để biết key nào đã hết quota.
+ * generate({ prompt, schema, … }): schema mặc định là biên bản thi (Số hóa điểm); trang Dò điểm truyền schema riêng – xem lib/prompts.js.
  */
 export function createClient({ pool, model }) {
   if (!pool || !pool.size) throw new AIError('Chưa có API key trong file public/api-keys.json.', { fatal: true })
   if (!model) throw new AIError('Chưa khai báo model trong file public/api-keys.json.', { fatal: true })
   let useMediaResolution = true
 
-  async function generate({ prompt, imageBase64, mimeType, signal, onWait }) {
+  async function generate({ prompt, schema = RESPONSE_SCHEMA, imageBase64, mimeType, signal, onWait }) {
     let lastErr
     let transient = 0
     // Không giới hạn số lần đổi key (có tới hàng chục key); chỉ giới hạn lỗi mạng/máy chủ liên tiếp.
@@ -159,7 +160,7 @@ export function createClient({ pool, model }) {
       }
       const entry = pick.entry
 
-      const generationConfig = { responseMimeType: 'application/json', responseSchema: RESPONSE_SCHEMA }
+      const generationConfig = { responseMimeType: 'application/json', responseSchema: schema }
       if (!isV3Plus(model)) generationConfig.temperature = 0
       if (useMediaResolution) generationConfig.mediaResolution = 'MEDIA_RESOLUTION_HIGH'
 

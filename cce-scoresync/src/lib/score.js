@@ -12,6 +12,30 @@ export function parseDigits(raw) {
 
 export const isValidScore = (n) => typeof n === 'number' && n >= 0 && n <= 10
 
+/**
+ * Điểm viết tay ở ô "Số" – người chấm hay bỏ dấu thập phân:
+ * "98" → 9.8, "9.3"/"9,3" → 9.3, "10" → 10, "7" → 7, "100" → 10.
+ */
+export function parseHandDigits(raw) {
+  const s = String(raw ?? '').trim().replace(/\s+/g, '').replace(',', '.')
+  if (!s) return null
+  let n
+  if (/^\d{1,2}\.\d{1,2}$/.test(s)) n = Number(s)
+  else if (/^\d{1,3}$/.test(s)) {
+    n = Number(s)
+    if (n > 10) n = s.length === 2 ? n / 10 : s === '100' ? 10 : NaN
+  } else return null
+  return isValidScore(n) ? n : null
+}
+
+/** Ô điểm in trên bảng điểm hệ thống: "9.8", "10.0", "7,5" → số; ô trống/ngày tháng → null. */
+export function parseSystemScore(raw) {
+  const s = String(raw ?? '').trim().replace(/\s+/g, '').replace(',', '.')
+  if (!/^\d{1,2}(\.\d{1,2})?$/.test(s)) return null
+  const n = Number(s)
+  return isValidScore(n) ? n : null
+}
+
 const strip = (s) =>
   s
     .toLowerCase()

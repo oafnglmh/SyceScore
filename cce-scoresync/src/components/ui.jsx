@@ -79,3 +79,13 @@ export function Progress({ value, tone = 'cce' }) {
     </div>
   )
 }
+
+const YEAR = new Date().getFullYear()
+
+export function Footer() {
+  return (
+    <footer className="mt-auto border-t border-slate-200 bg-white py-5 text-center text-xs text-slate-500">
+      © {YEAR} Trung tâm Đào tạo Thường xuyên – Đại học Đà Nẵng · 41 Lê Duẩn, TP. Đà Nẵng
+    </footer>
+  )
+}

@@ -2,6 +2,8 @@ import { ArrowRight, Check, CircleAlert, FileText, KeyRound, LoaderCircle, Rotat
 import { aiLabel } from '../lib/keys'
 import { Badge, Button } from './ui'
 
+const KIND_LABEL = { system: 'Bảng điểm hệ thống', hand: 'Biên bản viết tay' }
+
 const TILE = {
   queued: 'bg-slate-50 text-slate-400 ring-slate-200',
   reading: 'bg-cce-50 text-cce-700 ring-cce-300',
@@ -9,7 +11,15 @@ const TILE = {
   error: 'bg-rose-50 text-rose-700 ring-rose-300',
 }
 
-export default function ProcessingView({ job, stats, onCancel, onRetry, onContinue }) {
+export default function ProcessingView({
+  job,
+  stats,
+  onCancel,
+  onRetry,
+  onContinue,
+  title = 'AI CCE đang đọc chéo biên bản…',
+  continueLabel = 'Soát & xuất Excel',
+}) {
   const pages = job.files.flatMap((f) => f.pages)
   const done = pages.filter((p) => p.status === 'done').length
   const failed = pages.filter((p) => p.status === 'error').length
@@ -53,7 +63,7 @@ export default function ProcessingView({ job, stats, onCancel, onRetry, onContin
 
           <div className="min-w-0 flex-1">
             <h2 className="text-xl font-semibold">
-              {finished ? (failed ? 'Đã đọc xong – còn trang lỗi' : 'Đã đọc xong') : 'AI CCE đang đọc chéo biên bản…'}
+              {finished ? (failed ? 'Đã đọc xong – còn trang lỗi' : 'Đã đọc xong') : title}
             </h2>
             <div className="mt-2 flex flex-wrap gap-2 text-xs">
               <span className="rounded-full bg-white/10 px-2.5 py-1 ring-1 ring-white/15">{aiLabel(job.model)}</span>
@@ -84,7 +94,7 @@ export default function ProcessingView({ job, stats, onCancel, onRetry, onContin
             )}
             {finished && done > 0 && (
               <Button variant="gold" icon={ArrowRight} onClick={onContinue}>
-                Soát & xuất Excel
+                {continueLabel}
               </Button>
             )}
           </div>
@@ -126,6 +136,7 @@ export default function ProcessingView({ job, stats, onCancel, onRetry, onContin
           <div key={f.id} className="rounded-2xl bg-white p-5 ring-1 ring-slate-200">
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <FileText className="size-4 text-cce-500" />
+              {f.kind && <Badge tone={f.kind === 'hand' ? 'amber' : 'cce'}>{KIND_LABEL[f.kind]}</Badge>}
               <span className="text-sm font-semibold text-cce-900">{f.name}</span>
               {f.status === 'rendering' && (
                 <Badge tone="cce">
