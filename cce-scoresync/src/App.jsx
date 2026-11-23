@@ -78,7 +78,7 @@ export default function App() {
             <div className="hidden h-8 w-px bg-white/20 sm:block" />
             <div className="hidden text-left leading-tight md:block">
               <div className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-gold-300">
-                Trung tâm Đào tạo Thường xuyên · ĐH Đà Nẵng
+                Trung tâm Đào tạo Thường xuyên · Đại học Đà Nẵng
               </div>
               <div className="text-[15px] font-semibold">{route.title}</div>
             </div>
@@ -92,9 +92,8 @@ export default function App() {
                   key={r.path}
                   href={`#${r.path}`}
                   aria-current={active ? 'page' : undefined}
-                  className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold transition ${
-                    active ? 'bg-gold-400 text-cce-950 shadow' : 'text-white/80 hover:bg-white/10 hover:text-white'
-                  }`}
+                  className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-semibold transition ${active ? 'bg-gold-400 text-cce-950 shadow' : 'text-white/80 hover:bg-white/10 hover:text-white'
+                    }`}
                 >
                   <r.icon className="size-4" />
                   {r.label}
