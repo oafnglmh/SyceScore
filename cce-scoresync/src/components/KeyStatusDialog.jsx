@@ -38,7 +38,7 @@ export default function KeyStatusDialog({ config, keyProblem, onReload, onClose 
         <>
           {pool && (
             <Button icon={RotateCcw} onClick={() => pool.resetAll()}>
-              Thử lại tất cả key
+              Thử lại key
             </Button>
           )}
           <Button
@@ -51,7 +51,7 @@ export default function KeyStatusDialog({ config, keyProblem, onReload, onClose 
               setReloading(false)
             }}
           >
-            Tải lại file key
+            Kiểm tra lại
           </Button>
         </>
       }
@@ -59,9 +59,9 @@ export default function KeyStatusDialog({ config, keyProblem, onReload, onClose 
       <div className="flex gap-3 rounded-xl bg-cce-50 p-3.5 text-[13px] leading-relaxed text-cce-900 ring-1 ring-cce-100">
         <FileJson className="mt-0.5 size-4 shrink-0 text-cce-600" />
         <div>
-          Key được đọc từ file <code className="rounded bg-white px-1 font-semibold">cce-scoresync/public/api-keys.json</code>. Dán mỗi key
-          vào một ô trong mảng <code className="rounded bg-white px-1">"keys"</code>, lưu file rồi bấm <b>Tải lại file key</b>. Hệ thống xoay
-          vòng giữa các key; key hết quota trong ngày sẽ tự bỏ qua tới khi Google reset quota.
+          API key chỉ nằm trên server, trong file <code className="rounded bg-white px-1 font-semibold">cce-scoresync/.env</code>{' '}
+          (<code className="rounded bg-white px-1">GEMINI_API_KEY=…</code>). Trình duyệt không bao giờ nhận được key – mọi yêu cầu AI đi qua
+          server. Sửa file <code className="rounded bg-white px-1">.env</code> xong lưu lại (server tự khởi động lại) rồi bấm <b>Kiểm tra lại</b>.
         </div>
       </div>
 

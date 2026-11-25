@@ -23,9 +23,10 @@ dist-ssr
 *.sln
 *.sw?
 
-# Env
+# Env (chứa API key – không commit)
 .env
-.env.local
+.env.*
+!.env.example
 
-# API key Gemini (không commit)
+# File key cũ (không còn dùng)
 public/api-keys.json

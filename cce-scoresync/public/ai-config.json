@@ -1,0 +1,5 @@
+{
+  "_huong_dan": "Cấu hình KHÔNG bí mật. API key nằm trong file .env (GEMINI_API_KEY), không đặt key ở đây.",
+  "model": "3.5-flash",
+  "concurrency": 4
+}

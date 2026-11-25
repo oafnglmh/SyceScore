@@ -13,7 +13,7 @@ Trang nào đã mở thì giữ nguyên trạng thái khi chuyển qua lại gi�
 
 **Dò điểm** giữa **bảng điểm in từ hệ thống** (PDF scan) và **biên bản chấm có điểm viết tay** (PDF scan): ghép theo
 **cùng môn thi** (không xét lớp), so từng học viên và báo chính xác **dòng nào sai**.
-Ứng dụng chạy hoàn toàn trên trình duyệt (không có backend) – ảnh trang scan được gửi thẳng tới API của AI CCE (Google AI Studio).
+Ứng dụng chạy hoàn toàn trên trình duyệt (không có backend) – ảnh trang scan được gửi tới API của AI CCE (Google AI Studio) qua proxy của server Vite – xem mục API key.
 
 ## Chạy
 
@@ -23,24 +23,25 @@ npm install
 npm run dev        # http://localhost:5173
 ```
 
-### API key
+### API key (chỉ nằm trên server)
 
-Mở file `cce-scoresync/public/api-keys.json` và dán key vào mảng `keys` (mỗi ô một key, ô trống tự bỏ qua):
+API key **không bao giờ được gửi xuống trình duyệt**. Trình duyệt gọi `/ai-api/...` trên chính server của app; server Vite
+(`npm run dev` / `npm run preview`) tự gắn key rồi chuyển tiếp tới Google. Người dùng mở DevTools cũng không thấy key.
 
-```json
-{
-  "model": "3.5-flash",
-  "concurrency": 4,
-  "keys": ["AIza...key1", "AIza...key2", "..."]
-}
-```
+1. Sao chép `cce-scoresync/.env.example` thành `cce-scoresync/.env` và điền key:
 
-- Hệ thống **xoay vòng** giữa các key. Key hết hạn mức trong ngày sẽ bị bỏ qua (được ghi nhớ tới khi Google reset quota),
-  key không hợp lệ bị loại, key chạm giới hạn/phút được tạm nghỉ rồi dùng lại.
-- Sửa file xong bấm biểu tượng 🔑 trên thanh tiêu đề → **Tải lại file key** (không cần khởi động lại).
-- Các key **cùng một Google Cloud project dùng chung hạn mức** – muốn nhân quota thì key phải thuộc các project/tài khoản khác nhau.
-- `api-keys.json` đã nằm trong `.gitignore`; mẫu trống ở `public/api-keys.example.json`. Khi `npm run build`, file này được
-  chép vào `dist/` – chỉ deploy bản build trong mạng nội bộ.
+   ```
+   GEMINI_API_KEY=key_của_bạn
+   ```
+
+2. Lưu file: server tự khởi động lại. Trên giao diện bấm 🔑 → **Kiểm tra lại**.
+
+- Cấu hình không bí mật (model, số trang đọc song song) nằm ở `cce-scoresync/public/ai-config.json`.
+- `.env` nằm trong `.gitignore` và bị Vite chặn truy cập qua web (403). **Không** đặt key trong `public/` – mọi file
+  trong đó đều tải được từ trình duyệt.
+- Bản build (`dist/`) không chứa key. Muốn chạy bản build thì dùng `npm run preview` (có proxy); mở thẳng `dist/` trên web
+  server tĩnh sẽ không gọi được AI.
+- Ai truy cập được app (kể cả qua mạng LAN, vì server mở `host: true`) đều *dùng* được key qua proxy, dù không *thấy* key.
 
 ## Quy trình Dò điểm
 
@@ -76,7 +77,7 @@ cce-scoresync/src/
 └── lib/
     ├── ai.js                # Gọi API, prompt biên bản thi (Số hóa), thử lại khi 429/5xx
     ├── extract.js, excel.js # Số hóa: bỏ phiếu, ghép biên bản, xuất Excel theo mẫu
-    ├── keys.js              # Đọc api-keys.json, kho key xoay vòng, ghi nhớ key hết quota
+    ├── keys.js              # Đọc ai-config.json + trạng thái key trên server, ghi nhớ key hết quota
     ├── pages.js             # Tách PDF/ảnh thành ảnh trang (pdf.js)
     ├── prompts.js           # Prompt + JSON schema: bảng điểm hệ thống, biên bản viết tay
     ├── read.js              # Đọc chéo, bỏ phiếu, ghép trang thành học phần / biên bản

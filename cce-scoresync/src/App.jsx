@@ -65,7 +65,7 @@ export default function App() {
   const ready = !!config.pool && !!config.model
   const keyProblem = config.loading
     ? null
-    : config.error || (!config.keys?.length ? 'File public/api-keys.json chưa có API key nào.' : null)
+    : config.error || (!config.keys?.length ? 'Server chưa cấu hình API key (GEMINI_API_KEY trong file .env).' : null)
   const usable = stats ? stats.ready + stats.cooling : 0
   const openKeys = useCallback(() => setKeysOpen(true), [])
 
@@ -118,7 +118,7 @@ export default function App() {
                 {usable}/{stats.total} key
               </span>
             ) : (
-              <span>{config.loading ? 'Đang đọc file key' : 'Chưa có key'}</span>
+              <span>{config.loading ? 'Đang kiểm tra key' : 'Chưa có key'}</span>
             )}
             {config.model && <span className="hidden text-white/60 sm:inline">· {aiLabel(config.model)}</span>}
           </button>

@@ -1,7 +1,7 @@
-// Kho API key của AI CCE, đọc từ file public/api-keys.json.
-// - Xoay vòng: mỗi request lấy key đang rảnh nhất → 40 key chia đều tải, tránh giới hạn/phút.
-// - Key hết hạn mức NGÀY được ghi nhớ (localStorage) và bỏ qua tới khi Google reset quota (0h giờ Thái Bình Dương).
-// - Key không hợp lệ / bị khóa bị loại khỏi vòng.
+// Trạng thái API key của AI CCE.
+// - Key THẬT chỉ nằm trên server (file .env → GEMINI_API_KEY); trình duyệt gọi qua proxy /ai-api và chỉ biết dạng che của key.
+// - Cấu hình không bí mật (model, số trang đọc song song) đọc từ public/ai-config.json.
+// - Key hết hạn mức NGÀY được ghi nhớ (localStorage) tới khi Google reset quota (0h giờ Thái Bình Dương).
 
 // Tiền tố tên model theo quy ước của Google AI Studio – chỉ dùng nội bộ khi gọi API, không hiển thị.
 const MODEL_PREFIX = 'gemini-'
@@ -13,7 +13,8 @@ export const modelVersion = (model) => String(model || '').replace(/^models\//, 
 /** Tên hiển thị trên giao diện. */
 export const aiLabel = (model) => `AI CCE ${modelVersion(model)}`.trim()
 const STATE_KEY = 'cce_key_state_v1'
-const CONFIG_URL = `${import.meta.env.BASE_URL}api-keys.json`
+const CONFIG_URL = `${import.meta.env.BASE_URL}ai-config.json`
+const STATUS_URL = `${import.meta.env.BASE_URL}ai-api/status`
 
 // Quota miễn phí của Google AI Studio reset theo giờ Thái Bình Dương.
 const quotaDay = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(new Date())
@@ -26,8 +27,6 @@ function hashKey(key) {
   }
   return (h >>> 0).toString(16)
 }
-
-const mask = (key) => (key.length > 12 ? `${key.slice(0, 4)}…${key.slice(-4)}` : '••••')
 
 function readState() {
   try {
@@ -48,6 +47,7 @@ function writeState(state) {
 }
 
 export class KeyPool {
+  /** keys: nhãn hiển thị (dạng che) của key trên server – không phải key thật. */
   constructor(keys) {
     const saved = readState()
     this.entries = keys.map((key, index) => {
@@ -57,7 +57,7 @@ export class KeyPool {
         id,
         index: index + 1,
         key,
-        masked: mask(key),
+        masked: key,
         state: prev?.state || 'ready', // ready | exhausted | dead
         reason: prev?.reason || '',
         coolUntil: 0,
@@ -176,39 +176,41 @@ export class KeyPool {
   }
 }
 
-const looksLikePlaceholder = (k) => /dan_|paste|your|api_key|xxxx|key_here/i.test(k)
-
-/** Đọc public/api-keys.json → { model, concurrency, keys } */
-export async function loadKeyConfig() {
+async function fetchJson(url, what) {
   let res
   try {
-    res = await fetch(`${CONFIG_URL}?t=${Date.now()}`, { cache: 'no-store' })
+    res = await fetch(`${url}?t=${Date.now()}`, { cache: 'no-store' })
   } catch (e) {
-    throw new Error(`Không đọc được file api-keys.json: ${e.message}`)
+    throw new Error(`Không đọc được ${what}: ${e.message}`)
   }
   const text = await res.text()
-  if (!res.ok || /^\s*</.test(text)) {
-    throw new Error('Không tìm thấy file public/api-keys.json. Sao chép public/api-keys.example.json thành api-keys.json rồi điền key.')
-  }
-  let cfg
+  if (!res.ok || /^s*</.test(text)) throw Object.assign(new Error(`Không tìm thấy ${what}.`), { missing: true })
   try {
-    cfg = JSON.parse(text)
+    return JSON.parse(text)
   } catch (e) {
-    throw new Error(`File api-keys.json sai cú pháp JSON (${e.message}). Kiểm tra dấu phẩy và dấu ngoặc kép.`)
+    throw new Error(`${what} sai cú pháp JSON (${e.message}).`)
   }
-  const rawKeys = Array.isArray(cfg) ? cfg : cfg.keys || []
-  const keys = [
-    ...new Set(
-      rawKeys
-        .map((k) => String(typeof k === 'object' && k ? k.key : k || '').trim())
-        .filter((k) => k.length >= 20 && !/\s/.test(k) && !looksLikePlaceholder(k)),
-    ),
-  ]
+}
+
+/** Đọc public/ai-config.json + trạng thái key trên server → { model, concurrency, keys } */
+export async function loadKeyConfig() {
+  const [cfg, status] = await Promise.all([
+    fetchJson(CONFIG_URL, 'file public/ai-config.json').catch((e) => {
+      if (e.missing) return {}
+      throw e
+    }),
+    fetchJson(STATUS_URL, 'trạng thái API key của server').catch((e) => {
+      if (e.missing) {
+        throw new Error('Server không có proxy AI. Chạy app bằng "npm run dev" hoặc "npm run preview" (không mở thẳng thư mục dist).')
+      }
+      throw e
+    }),
+  ])
   // Cho phép ghi ngắn "3.5-flash" (khuyến nghị) hoặc tên đầy đủ.
   const version = modelVersion(String(cfg.model || DEFAULT_MODEL).trim())
   return {
     model: `models/${MODEL_PREFIX}${version}`,
     concurrency: Math.max(1, Math.min(16, parseInt(cfg.concurrency, 10) || 4)),
-    keys,
+    keys: status.configured ? [status.hint || 'Key server'] : [],
   }
 }

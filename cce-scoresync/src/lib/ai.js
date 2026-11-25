@@ -1,6 +1,7 @@
 import { modelVersion } from './keys'
 
-const API_ROOT = 'https://generativelanguage.googleapis.com/v1beta'
+// Gọi qua proxy của server (vite.config.js) – server tự gắn API key, trình duyệt không biết key.
+const API_ROOT = `${import.meta.env.BASE_URL}ai-api/v1beta`
 
 // ─── Prompt ──────────────────────────────────────────────────────────────────
 
@@ -137,19 +138,19 @@ const isV3Plus = (model) => parseFloat(modelVersion(model)) >= 3
  * generate({ prompt, schema, … }): schema mặc định là biên bản thi (Số hóa điểm); trang Dò điểm truyền schema riêng – xem lib/prompts.js.
  */
 export function createClient({ pool, model }) {
-  if (!pool || !pool.size) throw new AIError('Chưa có API key trong file public/api-keys.json.', { fatal: true })
-  if (!model) throw new AIError('Chưa khai báo model trong file public/api-keys.json.', { fatal: true })
+  if (!pool || !pool.size) throw new AIError('Server chưa cấu hình API key (GEMINI_API_KEY trong file .env).', { fatal: true })
+  if (!model) throw new AIError('Chưa khai báo model trong file public/ai-config.json.', { fatal: true })
   let useMediaResolution = true
 
   async function generate({ prompt, schema = RESPONSE_SCHEMA, imageBase64, mimeType, signal, onWait }) {
     let lastErr
     let transient = 0
-    // Không giới hạn số lần đổi key (có tới hàng chục key); chỉ giới hạn lỗi mạng/máy chủ liên tiếp.
+    // Chỉ giới hạn lỗi mạng/máy chủ liên tiếp; 429/phút thì chờ rồi thử lại.
     while (transient < 6) {
       const pick = pool.acquire()
       if (!pick) {
         throw new AIError(
-          `Tất cả ${pool.size} API key đều đã hết hạn mức hôm nay hoặc không hợp lệ. Thêm key mới vào public/api-keys.json rồi bấm “Tải lại file key”.`,
+          'API key của server đã hết hạn mức hôm nay hoặc không hợp lệ. Sửa GEMINI_API_KEY trong file .env rồi bấm “Kiểm tra lại”.',
           { fatal: true },
         )
       }
@@ -168,7 +169,7 @@ export function createClient({ pool, model }) {
       try {
         res = await fetch(`${API_ROOT}/${model}:generateContent`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': entry.key },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ role: 'user', parts: [{ inline_data: { mime_type: mimeType, data: imageBase64 } }, { text: prompt }] }],
             generationConfig,
@@ -212,7 +213,7 @@ export function createClient({ pool, model }) {
         continue
       }
       if (status === 404) {
-        throw new AIError(`Không tìm thấy phiên bản “${modelVersion(model)}”. Kiểm tra trường "model" trong public/api-keys.json.`, {
+        throw new AIError(`Không tìm thấy phiên bản “${modelVersion(model)}”. Kiểm tra trường "model" trong public/ai-config.json.`, {
           status,
           fatal: true,
         })
