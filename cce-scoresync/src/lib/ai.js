@@ -223,6 +223,13 @@ export function createClient({ pool, model }) {
         lastErr = new AIError(message || `Key bị từ chối (${status})`, { status })
         continue
       }
+      if (status === 402) {
+        pool.markExhausted(entry, 'Hết tiền trả trước (402)')
+        throw new AIError(
+          'Tài khoản Google AI Studio của API key đã hết tiền trả trước (402). Nạp thêm tại ai.studio/projects rồi bấm “Thử lại key”.',
+          { status, fatal: true },
+        )
+      }
       if (status === 429) {
         if (isDailyQuota(json)) pool.markExhausted(entry, 'Hết hạn mức trong ngày')
         else pool.cooldown(entry, retryDelayMs(json) ?? 30000)

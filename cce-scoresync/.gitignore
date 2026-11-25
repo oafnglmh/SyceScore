@@ -30,3 +30,6 @@ dist-ssr
 
 # File key cũ (không còn dùng)
 public/api-keys.json
+
+# Gói deploy (có thể chứa API key)
+deploy/out/
