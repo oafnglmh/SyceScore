@@ -125,7 +125,8 @@ function retryDelayMs(body) {
 /** 429 do hết hạn mức NGÀY (không phải giới hạn mỗi phút). */
 function isDailyQuota(body) {
   const text = JSON.stringify(body?.error || {})
-  return /PerDay|per day|daily/i.test(text)
+  // "limit: 0" = model không có hạn mức free cho key này → coi như hết cả ngày.
+  return /PerDay|per day|daily|limit: 0\b/i.test(text)
 }
 
 // Model thế hệ 3.x khuyến nghị giữ temperature mặc định; model cũ hơn dùng 0 để ổn định.
@@ -150,7 +151,7 @@ export function createClient({ pool, model }) {
       const pick = pool.acquire()
       if (!pick) {
         throw new AIError(
-          'API key của server đã hết hạn mức hôm nay hoặc không hợp lệ. Sửa GEMINI_API_KEY trong file .env rồi bấm “Kiểm tra lại”.',
+          'Tất cả API key của server (free và trả phí) đã hết hạn mức hôm nay hoặc không hợp lệ. Sửa GEMINI_FREE_KEYS / GEMINI_API_KEY trong file .env rồi bấm “Kiểm tra lại”.',
           { fatal: true },
         )
       }
@@ -169,7 +170,8 @@ export function createClient({ pool, model }) {
       try {
         res = await fetch(`${API_ROOT}/${model}:generateContent`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          // Server chọn key theo slot (f1…fN = free, p = trả phí) – trình duyệt không biết key thật.
+          headers: { 'Content-Type': 'application/json', 'X-CCE-Key': entry.slot },
           body: JSON.stringify({
             contents: [{ role: 'user', parts: [{ inline_data: { mime_type: mimeType, data: imageBase64 } }, { text: prompt }] }],
             generationConfig,
@@ -225,6 +227,7 @@ export function createClient({ pool, model }) {
       }
       if (status === 402) {
         pool.markExhausted(entry, 'Hết tiền trả trước (402)')
+        if (entry.tier === 'free') continue
         throw new AIError(
           'Tài khoản Google AI Studio của API key đã hết tiền trả trước (402). Nạp thêm tại ai.studio/projects rồi bấm “Thử lại key”.',
           { status, fatal: true },

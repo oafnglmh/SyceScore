@@ -1,5 +1,7 @@
 // Trạng thái API key của AI CCE.
-// - Key THẬT chỉ nằm trên server (file .env → GEMINI_API_KEY); trình duyệt gọi qua proxy /ai-api và chỉ biết dạng che của key.
+// - Key THẬT chỉ nằm trên server (file .env → GEMINI_FREE_KEYS + GEMINI_API_KEY); trình duyệt gọi qua proxy /ai-api,
+//   chỉ biết slot (f1, f2, …, p) + dạng che của key và chọn key bằng header X-CCE-Key.
+// - Luôn dùng key FREE trước; key TRẢ PHÍ (slot p) chỉ dùng khi mọi key free đã hết quota hôm nay / không hợp lệ.
 // - Cấu hình không bí mật (model, số trang đọc song song) đọc từ public/ai-config.json.
 // - Key hết hạn mức NGÀY được ghi nhớ (localStorage) tới khi Google reset quota (0h giờ Thái Bình Dương).
 
@@ -46,18 +48,22 @@ function writeState(state) {
   }
 }
 
+// Thứ tự ưu tiên: hết key free dùng được mới sang key trả phí.
+const TIERS = ['free', 'paid']
+
 export class KeyPool {
-  /** keys: nhãn hiển thị (dạng che) của key trên server – không phải key thật. */
+  /** keys: [{ slot, hint, tier }] – slot + dạng che của key trên server, không phải key thật. */
   constructor(keys) {
     const saved = readState()
-    this.entries = keys.map((key, index) => {
-      const id = hashKey(key)
+    this.entries = keys.map(({ slot, hint, tier }, index) => {
+      const id = hashKey(`${slot}:${hint}`)
       const prev = saved.keys[id]
       return {
         id,
         index: index + 1,
-        key,
-        masked: key,
+        slot,
+        tier: tier === 'paid' ? 'paid' : 'free',
+        masked: hint,
         state: prev?.state || 'ready', // ready | exhausted | dead
         reason: prev?.reason || '',
         coolUntil: 0,
@@ -101,20 +107,24 @@ export class KeyPool {
     this.persist()
   }
 
-  /** → { entry, waitMs: 0 } | { waitMs } (tất cả đang nghỉ) | null (không còn key dùng được) */
+  /**
+   * → { entry, waitMs: 0 } | { waitMs } (tất cả đang nghỉ) | null (không còn key dùng được)
+   * Còn key free chưa hết quota ngày thì chỉ dùng key free (đang nghỉ/phút thì chờ), không đụng key trả phí.
+   */
   acquire() {
     this.rollDay()
     const now = Date.now()
-    const usable = this.entries.filter((e) => e.state === 'ready')
-    if (!usable.length) return null
-    const free = usable.filter((e) => e.coolUntil <= now)
-    if (!free.length) return { waitMs: Math.min(...usable.map((e) => e.coolUntil)) - now + 50 }
+    const tier = TIERS.find((t) => this.entries.some((e) => e.tier === t && e.state === 'ready'))
+    if (!tier) return null
+    const usable = this.entries.filter((e) => e.tier === tier && e.state === 'ready')
+    const idle = usable.filter((e) => e.coolUntil <= now)
+    if (!idle.length) return { waitMs: Math.min(...usable.map((e) => e.coolUntil)) - now + 50 }
     // Key ít request đang chạy nhất; hòa thì xoay vòng.
-    const minLoad = Math.min(...free.map((e) => e.inFlight))
+    const minLoad = Math.min(...idle.map((e) => e.inFlight))
     const n = this.entries.length
     for (let i = 0; i < n; i++) {
       const e = this.entries[(this.cursor + i) % n]
-      if (e.state === 'ready' && e.coolUntil <= now && e.inFlight === minLoad) {
+      if (e.tier === tier && e.state === 'ready' && e.coolUntil <= now && e.inFlight === minLoad) {
         this.cursor = (this.cursor + i + 1) % n
         e.inFlight++
         this.emit()
@@ -166,12 +176,18 @@ export class KeyPool {
 
   stats() {
     const now = Date.now()
-    const s = { total: this.size, ready: 0, cooling: 0, exhausted: 0, dead: 0 }
+    const s = { total: this.size, ready: 0, cooling: 0, exhausted: 0, dead: 0, freeTotal: 0, freeUsable: 0, paidTotal: 0 }
     for (const e of this.entries) {
+      if (e.tier === 'free') {
+        s.freeTotal++
+        if (e.state === 'ready') s.freeUsable++
+      } else s.paidTotal++
       if (e.state !== 'ready') s[e.state]++
       else if (e.coolUntil > now) s.cooling++
       else s.ready++
     }
+    // Đang phải dùng key trả phí: không còn key free nào dùng được hôm nay.
+    s.usingPaid = s.paidTotal > 0 && s.freeUsable === 0
     return s
   }
 }
@@ -211,6 +227,11 @@ export async function loadKeyConfig() {
   return {
     model: `models/${MODEL_PREFIX}${version}`,
     concurrency: Math.max(1, Math.min(16, parseInt(cfg.concurrency, 10) || 4)),
-    keys: status.configured ? [status.hint || 'Key server'] : [],
+    // Server cũ chỉ có 1 key (không có danh sách) → coi là key trả phí ở slot p.
+    keys: Array.isArray(status.keys) && status.keys.length
+      ? status.keys
+      : status.configured
+        ? [{ slot: 'p', hint: status.hint || 'Key server', tier: 'paid' }]
+        : [],
   }
 }

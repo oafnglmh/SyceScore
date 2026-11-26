@@ -1,9 +1,11 @@
-import { GitCompareArrows, KeyRound, LoaderCircle, ScanText } from 'lucide-react'
+import { GitCompareArrows, KeyRound, LoaderCircle, LogOut, ScanText } from 'lucide-react'
 import { useCallback, useEffect, useReducer, useState } from 'react'
 import KeyStatusDialog from './components/KeyStatusDialog'
 import useHashRoute from './hooks/useHashRoute'
+import { clearUser, getSavedUser, saveUser } from './lib/auth'
 import { aiLabel, KeyPool, loadKeyConfig } from './lib/keys'
 import DoDiemPage from './pages/DoDiemPage'
+import LoginPage from './pages/LoginPage'
 import SoHoaPage from './pages/SoHoaPage'
 
 // Mỗi chức năng một route riêng; trang nào đã mở thì giữ nguyên trạng thái khi chuyển qua lại.
@@ -32,6 +34,13 @@ function usePoolStats(pool) {
 const toConfig = (cfg) => ({ ...cfg, pool: cfg.keys.length ? new KeyPool(cfg.keys) : null, error: null })
 
 export default function App() {
+  const [user, setUser] = useState(getSavedUser)
+  const login = useCallback((u) => (saveUser(u), setUser(u)), [])
+  const logout = useCallback(() => (clearUser(), setUser(null)), [])
+  return user ? <Workspace user={user} onLogout={logout} /> : <LoginPage onLogin={login} />
+}
+
+function Workspace({ user, onLogout }) {
   const [config, setConfig] = useState({ loading: true })
   const [keysOpen, setKeysOpen] = useState(false)
   const stats = usePoolStats(config.pool)
@@ -65,7 +74,7 @@ export default function App() {
   const ready = !!config.pool && !!config.model
   const keyProblem = config.loading
     ? null
-    : config.error || (!config.keys?.length ? 'Server chưa cấu hình API key (GEMINI_API_KEY trong file .env).' : null)
+    : config.error || (!config.keys?.length ? 'Server chưa cấu hình API key (GEMINI_FREE_KEYS / GEMINI_API_KEY trong file .env).' : null)
   const usable = stats ? stats.ready + stats.cooling : 0
   const openKeys = useCallback(() => setKeysOpen(true), [])
 
@@ -105,12 +114,12 @@ export default function App() {
           <button
             onClick={openKeys}
             className="ml-auto flex items-center gap-2 rounded-full bg-white/10 py-1.5 pl-2.5 pr-3 text-xs font-medium ring-1 ring-white/15 transition hover:bg-white/15"
-            title="Trạng thái API key"
+            title={stats?.usingPaid ? 'Đã hết key free – đang dùng key trả phí' : 'Trạng thái API key'}
           >
             {config.loading ? (
               <LoaderCircle className="size-3.5 animate-spin" />
             ) : (
-              <span className={`size-2 rounded-full ${keyProblem || !usable ? 'bg-rose-400' : 'bg-emerald-400'} ring-2 ring-white/20`} />
+              <span className={`size-2 rounded-full ${keyProblem || !usable ? 'bg-rose-400' : stats?.usingPaid ? 'bg-gold-400' : 'bg-emerald-400'} ring-2 ring-white/20`} />
             )}
             <KeyRound className="size-3.5 text-gold-300" />
             {stats ? (
@@ -121,6 +130,15 @@ export default function App() {
               <span>{config.loading ? 'Đang kiểm tra key' : 'Chưa có key'}</span>
             )}
             {config.model && <span className="hidden text-white/60 sm:inline">· {aiLabel(config.model)}</span>}
+          </button>
+
+          <button
+            onClick={onLogout}
+            className="flex items-center gap-1.5 rounded-full py-1.5 pl-2.5 pr-3 text-xs font-medium text-white/80 ring-1 ring-white/15 transition hover:bg-white/10 hover:text-white"
+            title={`Đăng xuất (${user})`}
+          >
+            <LogOut className="size-3.5" />
+            <span className="hidden sm:inline">{user}</span>
           </button>
         </div>
         <div className="h-[3px] bg-gradient-to-r from-gold-500 via-gold-300 to-gold-500" />

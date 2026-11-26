@@ -59,9 +59,11 @@ export default function KeyStatusDialog({ config, keyProblem, onReload, onClose 
       <div className="flex gap-3 rounded-xl bg-cce-50 p-3.5 text-[13px] leading-relaxed text-cce-900 ring-1 ring-cce-100">
         <FileJson className="mt-0.5 size-4 shrink-0 text-cce-600" />
         <div>
-          API key chỉ nằm trên server, trong file <code className="rounded bg-white px-1 font-semibold">cce-scoresync/.env</code>{' '}
-          (<code className="rounded bg-white px-1">GEMINI_API_KEY=…</code>). Trình duyệt không bao giờ nhận được key – mọi yêu cầu AI đi qua
-          server. Sửa file <code className="rounded bg-white px-1">.env</code> xong lưu lại (server tự khởi động lại) rồi bấm <b>Kiểm tra lại</b>.
+          API key chỉ nằm trên server, trong file <code className="rounded bg-white px-1 font-semibold">cce-scoresync/.env</code>:{' '}
+          <code className="rounded bg-white px-1">GEMINI_FREE_KEYS=…</code> (các key free, cách nhau bởi dấu phẩy) và{' '}
+          <code className="rounded bg-white px-1">GEMINI_API_KEY=…</code> (key trả phí). Luôn dùng key <b>free</b> trước; key trả phí chỉ được
+          dùng khi mọi key free đã hết hạn mức hôm nay. Trình duyệt không bao giờ nhận được key – mọi yêu cầu AI đi qua server. Sửa file{' '}
+          <code className="rounded bg-white px-1">.env</code> xong lưu lại (server tự khởi động lại) rồi bấm <b>Kiểm tra lại</b>.
         </div>
       </div>
 
@@ -77,8 +79,8 @@ export default function KeyStatusDialog({ config, keyProblem, onReload, onClose 
           <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
             {[
               ['Bộ máy AI', aiLabel(config.model)],
-              ['Tổng số key', stats.total],
-              ['Đang dùng được', stats.ready + stats.cooling],
+              ['Key free dùng được', `${stats.freeUsable}/${stats.freeTotal}`],
+              ['Key trả phí', !stats.paidTotal ? 'Không có' : stats.usingPaid ? 'Đang dùng' : 'Dự phòng'],
               ['Đọc song song', `${config.concurrency} trang`],
             ].map(([label, value]) => (
               <div key={label} className="rounded-xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-200">
@@ -97,6 +99,9 @@ export default function KeyStatusDialog({ config, keyProblem, onReload, onClose 
                   <span className="w-6 text-right text-[11px] tabular-nums text-slate-400">#{e.index}</span>
                   <span className={`size-2 shrink-0 rounded-full ${ui.dot}`} />
                   <code className="text-[12px] text-slate-700">{e.masked}</code>
+                  {e.tier === 'paid' && (
+                    <span className="rounded bg-gold-100 px-1.5 text-[10px] font-semibold uppercase text-gold-600">Trả phí</span>
+                  )}
                   <span className={`ml-auto truncate text-[11px] ${ui.tone}`}>
                     {state === 'cooling' ? `Nghỉ ${Math.ceil((e.coolUntil - now) / 1000)}s` : ui.label}
                     {e.success > 0 && <span className="text-slate-400"> · {e.success} lượt</span>}
